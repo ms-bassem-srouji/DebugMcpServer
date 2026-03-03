@@ -84,6 +84,7 @@ internal static class Program
                 })
                 .Build();
 
+            Console.Error.WriteLine($"DebugMcpServer v{McpHostedService.ServerVersion}");
             await host.RunAsync().ConfigureAwait(false);
         }
         catch (Exception ex)

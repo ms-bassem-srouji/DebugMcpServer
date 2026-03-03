@@ -122,4 +122,170 @@ public class McpHostedServiceTests
 
         result["error"]!["code"]!.GetValue<int>().Should().Be(-32601);
     }
+
+    // --- Version tests ---
+
+    [TestMethod]
+    public void ServerVersion_IsNotEmpty()
+    {
+        McpHostedService.ServerVersion.Should().NotBeNullOrEmpty();
+    }
+
+    [TestMethod]
+    public void ServerVersion_IsNotFallback()
+    {
+        // The assembly should have an InformationalVersion set by the csproj <Version> property
+        McpHostedService.ServerVersion.Should().NotBe("0.0.0");
+    }
+
+    [TestMethod]
+    public async Task HandleInitialize_ReturnsDynamicVersion()
+    {
+        var svc = CreateService();
+        var request = JsonNode.Parse("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}""")!;
+
+        var result = await svc.HandleRequestAsync(request, CancellationToken.None);
+
+        var version = result["result"]!["serverInfo"]!["version"]!.GetValue<string>();
+        version.Should().Be(McpHostedService.ServerVersion);
+    }
+
+    // --- Robustness: HandleRequestAsync with missing/null fields ---
+
+    [TestMethod]
+    public async Task HandleRequest_MissingMethod_ReturnsMethodNotFound()
+    {
+        var svc = CreateService();
+        var request = JsonNode.Parse("""{"jsonrpc":"2.0","id":1}""")!;
+
+        var result = await svc.HandleRequestAsync(request, CancellationToken.None);
+
+        result["error"]!["code"]!.GetValue<int>().Should().Be(-32601);
+    }
+
+    [TestMethod]
+    public async Task HandleRequest_NullId_ReturnsValidResponse()
+    {
+        var svc = CreateService();
+        var request = JsonNode.Parse("""{"jsonrpc":"2.0","id":null,"method":"initialize","params":{}}""")!;
+
+        var result = await svc.HandleRequestAsync(request, CancellationToken.None);
+
+        result["result"]!["protocolVersion"]!.GetValue<string>().Should().Be("2024-11-05");
+    }
+
+    [TestMethod]
+    public async Task HandleToolsCall_ToolThrowsException_ReturnsError()
+    {
+        var tool = Substitute.For<IMcpTool>();
+        tool.Name.Returns("bad_tool");
+        tool.ExecuteAsync(Arg.Any<JsonNode?>(), Arg.Any<JsonNode?>(), Arg.Any<CancellationToken>())
+            .Returns<JsonNode>(_ => throw new InvalidOperationException("Something went wrong"));
+
+        var svc = CreateService([tool]);
+        var request = JsonNode.Parse("""{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"bad_tool","arguments":{}}}""")!;
+
+        // HandleRequestAsync lets exceptions propagate — ProcessRequestAsync catches them.
+        // So calling HandleRequestAsync directly should throw.
+        var act = () => svc.HandleRequestAsync(request, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("Something went wrong");
+    }
+
+    // --- HandleRequestAsync robustness: various malformed/edge-case requests ---
+
+    [TestMethod]
+    public async Task HandleRequest_EmptyObject_ReturnsMethodNotFound()
+    {
+        var svc = CreateService();
+        var request = JsonNode.Parse("""{}""")!;
+
+        var result = await svc.HandleRequestAsync(request, CancellationToken.None);
+
+        result["error"]!["code"]!.GetValue<int>().Should().Be(-32601);
+    }
+
+    [TestMethod]
+    public async Task HandleToolsCall_NullParams_ReturnsUnknownToolError()
+    {
+        var svc = CreateService();
+        var request = JsonNode.Parse("""{"jsonrpc":"2.0","id":1,"method":"tools/call"}""")!;
+
+        var result = await svc.HandleRequestAsync(request, CancellationToken.None);
+
+        result["error"]!["code"]!.GetValue<int>().Should().Be(-32602);
+    }
+
+    [TestMethod]
+    public async Task HandleToolsCall_EmptyParams_ReturnsUnknownToolError()
+    {
+        var svc = CreateService();
+        var request = JsonNode.Parse("""{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{}}""")!;
+
+        var result = await svc.HandleRequestAsync(request, CancellationToken.None);
+
+        result["error"]!["code"]!.GetValue<int>().Should().Be(-32602);
+        result["error"]!["message"]!.GetValue<string>().Should().Contain("Unknown tool");
+    }
+
+    [TestMethod]
+    public async Task HandleInitialize_WithStringId_ReturnsMatchingId()
+    {
+        var svc = CreateService();
+        var request = JsonNode.Parse("""{"jsonrpc":"2.0","id":"abc-123","method":"initialize","params":{}}""")!;
+
+        var result = await svc.HandleRequestAsync(request, CancellationToken.None);
+
+        result["id"]!.GetValue<string>().Should().Be("abc-123");
+    }
+
+    [TestMethod]
+    public async Task HandleInitialize_VersionMatchesServerVersion()
+    {
+        var svc = CreateService();
+        var request = JsonNode.Parse("""{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}""")!;
+
+        var result = await svc.HandleRequestAsync(request, CancellationToken.None);
+
+        var version = result["result"]!["serverInfo"]!["version"]!.GetValue<string>();
+        version.Should().Contain("0."); // Should contain the actual version, not "1.0.0"
+        version.Should().Be(McpHostedService.ServerVersion);
+    }
+
+    // --- JSON parsing robustness (testing the parsing behavior that the read loop relies on) ---
+
+    [TestMethod]
+    public void JsonNodeParse_MalformedJson_ThrowsJsonException()
+    {
+        // Confirms that JsonNode.Parse throws JsonException on malformed input,
+        // which is what the read loop catches to skip bad messages
+        var act = () => JsonNode.Parse("not valid json");
+
+        act.Should().Throw<System.Text.Json.JsonException>();
+    }
+
+    [TestMethod]
+    public void JsonNodeParse_TruncatedJson_ThrowsJsonException()
+    {
+        var act = () => JsonNode.Parse("""{"method":"tools/list""");
+
+        act.Should().Throw<System.Text.Json.JsonException>();
+    }
+
+    [TestMethod]
+    public void JsonNodeParse_EmptyString_ThrowsJsonException()
+    {
+        var act = () => JsonNode.Parse("");
+
+        act.Should().Throw<System.Text.Json.JsonException>();
+    }
+
+    [TestMethod]
+    public void JsonNodeParse_NullLiteral_ReturnsNull()
+    {
+        // JsonNode.Parse("null") returns null — the read loop skips these
+        var result = JsonNode.Parse("null");
+
+        result.Should().BeNull();
+    }
 }

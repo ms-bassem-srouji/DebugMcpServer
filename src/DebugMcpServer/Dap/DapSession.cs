@@ -321,7 +321,7 @@ internal sealed class DapSession : IDapSession
         await WriteDapMessageAsync(response, _sessionCts.Token);
     }
 
-    private static async Task<JsonNode?> ReadDapMessageAsync(Stream stream, CancellationToken ct)
+    internal static async Task<JsonNode?> ReadDapMessageAsync(Stream stream, CancellationToken ct)
     {
         // Read headers line by line until blank line
         int contentLength = 0;
@@ -343,11 +343,12 @@ internal sealed class DapSession : IDapSession
 
             if (line.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
             {
-                contentLength = int.Parse(line["Content-Length:".Length..].Trim());
+                if (!int.TryParse(line["Content-Length:".Length..].Trim(), out contentLength))
+                    return null; // Malformed Content-Length header
             }
         }
 
-        if (contentLength == 0) return null;
+        if (contentLength <= 0) return null;
 
         // Read body
         var body = new byte[contentLength];
@@ -359,7 +360,14 @@ internal sealed class DapSession : IDapSession
             totalRead += read;
         }
 
-        return JsonNode.Parse(Encoding.UTF8.GetString(body));
+        try
+        {
+            return JsonNode.Parse(Encoding.UTF8.GetString(body));
+        }
+        catch (JsonException)
+        {
+            return null; // Malformed JSON body from adapter
+        }
     }
 
     private static async Task<int> ReadByteAsync(Stream stream, CancellationToken ct)

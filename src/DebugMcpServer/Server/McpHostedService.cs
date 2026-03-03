@@ -1,3 +1,4 @@
+using System.Reflection;
 using DebugMcpServer.Tools;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -16,6 +17,11 @@ internal sealed class McpHostedService : IHostedService
     private readonly IEnumerable<IMcpTool> _tools;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private Task? _runTask;
+
+    internal static readonly string ServerVersion =
+        typeof(McpHostedService).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion ?? "0.0.0";
 
     public McpHostedService(
         ILogger<McpHostedService> logger,
@@ -43,7 +49,7 @@ internal sealed class McpHostedService : IHostedService
             using var reader = new StreamReader(stdin);
             using var writer = new StreamWriter(stdout) { AutoFlush = true };
 
-            _logger.LogInformation("MCP Server ready - listening on stdin/stdout (concurrent request processing enabled)");
+            _logger.LogInformation("MCP Server v{Version} ready — listening on stdin/stdout (concurrent request processing enabled)", ServerVersion);
 
             while (!cancellationToken.IsCancellationRequested)
             {
@@ -53,7 +59,22 @@ internal sealed class McpHostedService : IHostedService
                     break;
                 }
 
-                var request = JsonNode.Parse(line);
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                JsonNode? request;
+                try
+                {
+                    request = JsonNode.Parse(line);
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogWarning("Ignoring malformed JSON-RPC message: {Error}", ex.Message);
+                    continue;
+                }
+
                 if (request == null)
                 {
                     continue;
@@ -102,6 +123,28 @@ internal sealed class McpHostedService : IHostedService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing MCP request");
+
+            // Send error response so the client isn't left hanging
+            try
+            {
+                var id = request["id"];
+                var errorResponse = CreateErrorResponse(id, -32603, $"Internal error: {ex.Message}");
+                var errorJson = errorResponse.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
+
+                await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await writer.WriteLineAsync(errorJson).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _writeLock.Release();
+                }
+            }
+            catch
+            {
+                // Last resort: don't crash the server trying to report an error
+            }
         }
     }
 
@@ -185,7 +228,7 @@ internal sealed class McpHostedService : IHostedService
                 },
                 "serverInfo": {
                     "name": "debug-mcp",
-                    "version": "1.0.0"
+                    "version": "{{ServerVersion}}"
                 },
                 "instructions": {{JsonSerializer.Serialize(ServerInstructions)}}
             }
