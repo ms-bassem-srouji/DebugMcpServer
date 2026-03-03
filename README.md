@@ -1,3 +1,6 @@
+[![CI](https://github.com/ms-bassem-srouji/DebugMcpServer/actions/workflows/ci.yml/badge.svg)](https://github.com/ms-bassem-srouji/DebugMcpServer/actions/workflows/ci.yml)
+[![NuGet](https://img.shields.io/nuget/v/DebugMcpServer.svg)](https://www.nuget.org/packages/DebugMcpServer)
+
 # Debug MCP Server
 
 A Model Context Protocol (MCP) server that provides interactive debugging capabilities for AI assistants using the [Debug Adapter Protocol (DAP)](https://microsoft.github.io/debug-adapter-protocol/).
@@ -14,22 +17,46 @@ Attach to running processes, set breakpoints, step through code, inspect variabl
 - **Source view** — View source code around the current stop location with line numbers
 - **Human-readable errors** — Common DAP error codes are translated into actionable guidance
 
+## Installation
+
+### dotnet tool (recommended)
+
+Requires [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) or later.
+
+```bash
+dotnet tool install -g DebugMcpServer
+```
+
+This installs the `debug-mcp-server` command globally on your PATH.
+
+### Self-contained binaries
+
+Pre-built binaries with no .NET SDK required are available on [GitHub Releases](https://github.com/ms-bassem-srouji/DebugMcpServer/releases):
+
+| Platform | Asset |
+|----------|-------|
+| Windows x64 | `debug-mcp-server-win-x64.zip` |
+| Linux x64 | `debug-mcp-server-linux-x64.tar.gz` |
+| macOS x64 | `debug-mcp-server-osx-x64.tar.gz` |
+| macOS ARM64 | `debug-mcp-server-osx-arm64.tar.gz` |
+
+### Build from source
+
+```bash
+git clone https://github.com/ms-bassem-srouji/DebugMcpServer.git
+cd DebugMcpServer
+dotnet build
+```
+
 ## Quick Start
 
 ### Prerequisites
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) or later
 - A DAP-compatible debug adapter:
   - **.NET**: [netcoredbg](https://github.com/Samsung/netcoredbg) (recommended)
   - **Python**: [debugpy](https://github.com/microsoft/debugpy)
   - **Node.js**: [js-debug](https://github.com/microsoft/vscode-js-debug)
   - **C++**: [cpptools](https://github.com/microsoft/vscode-cpptools)
-
-### Build
-
-```bash
-dotnet build
-```
 
 ### Configure
 
@@ -46,14 +73,6 @@ Edit `src/DebugMcpServer/appsettings.json` to set your adapter paths:
 }
 ```
 
-### Run
-
-```bash
-dotnet run --project src/DebugMcpServer
-```
-
-The server communicates over stdio using JSON-RPC (MCP protocol).
-
 ### MCP Client Configuration
 
 ### Install for Your AI Client
@@ -66,8 +85,7 @@ Add to your project's `.mcp.json` file (or `~/.claude/settings.json` for global)
 {
   "mcpServers": {
     "debugger": {
-      "command": "dotnet",
-      "args": ["run", "--project", "/path/to/DebugMcpServer/src/DebugMcpServer"]
+      "command": "debug-mcp-server"
     }
   }
 }
@@ -76,8 +94,26 @@ Add to your project's `.mcp.json` file (or `~/.claude/settings.json` for global)
 Or via the CLI:
 
 ```bash
-claude mcp add debugger -- dotnet run --project /path/to/DebugMcpServer/src/DebugMcpServer
+claude mcp add debugger -- debug-mcp-server
 ```
+
+<details>
+<summary>Alternative: Build from source</summary>
+
+```json
+{
+  "mcpServers": {
+    "debugger": {
+      "command": "dotnet",
+      "args": ["run", "--project", "/path/to/DebugMcpServer/src/DebugMcpServer"]
+    }
+  }
+}
+```
+
+CLI: `claude mcp add debugger -- dotnet run --project /path/to/DebugMcpServer/src/DebugMcpServer`
+
+</details>
 
 #### VS Code (GitHub Copilot)
 
@@ -88,8 +124,7 @@ Add to your workspace `.vscode/mcp.json`:
   "servers": {
     "debugger": {
       "type": "stdio",
-      "command": "dotnet",
-      "args": ["run", "--project", "/path/to/DebugMcpServer/src/DebugMcpServer"]
+      "command": "debug-mcp-server"
     }
   }
 }
@@ -103,17 +138,47 @@ Or add to your user settings (`settings.json`):
     "servers": {
       "debugger": {
         "type": "stdio",
-        "command": "dotnet",
-        "args": ["run", "--project", "/path/to/DebugMcpServer/src/DebugMcpServer"]
+        "command": "debug-mcp-server"
       }
     }
   }
 }
 ```
 
+<details>
+<summary>Alternative: Build from source</summary>
+
+```json
+{
+  "servers": {
+    "debugger": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--project", "/path/to/DebugMcpServer/src/DebugMcpServer"]
+    }
+  }
+}
+```
+
+</details>
+
 #### GitHub Copilot CLI
 
 Add to `~/.copilot/mcp-config.json`:
+
+```json
+{
+  "mcpServers": {
+    "debugger": {
+      "type": "stdio",
+      "command": "debug-mcp-server"
+    }
+  }
+}
+```
+
+<details>
+<summary>Alternative: Build from source</summary>
 
 ```json
 {
@@ -127,9 +192,24 @@ Add to `~/.copilot/mcp-config.json`:
 }
 ```
 
+</details>
+
 #### Cursor
 
 Add to your project's `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "debugger": {
+      "command": "debug-mcp-server"
+    }
+  }
+}
+```
+
+<details>
+<summary>Alternative: Build from source</summary>
 
 ```json
 {
@@ -141,6 +221,8 @@ Add to your project's `.cursor/mcp.json`:
   }
 }
 ```
+
+</details>
 
 #### Windsurf
 
@@ -150,6 +232,19 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 {
   "mcpServers": {
     "debugger": {
+      "command": "debug-mcp-server"
+    }
+  }
+}
+```
+
+<details>
+<summary>Alternative: Build from source</summary>
+
+```json
+{
+  "mcpServers": {
+    "debugger": {
       "command": "dotnet",
       "args": ["run", "--project", "/path/to/DebugMcpServer/src/DebugMcpServer"]
     }
@@ -157,7 +252,9 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 }
 ```
 
-> **Note**: Replace `/path/to/DebugMcpServer` with the actual path where you cloned this repository. On Windows, use backslashes or forward slashes (e.g., `C:/repos/DebugMcpServer/src/DebugMcpServer`).
+</details>
+
+> **Note**: The `debug-mcp-server` command is available on your PATH after running `dotnet tool install -g DebugMcpServer`. If you are using the build-from-source configs, replace `/path/to/DebugMcpServer` with the actual path where you cloned the repository. On Windows, use backslashes or forward slashes (e.g., `C:/repos/DebugMcpServer/src/DebugMcpServer`).
 
 ## Tools
 
@@ -453,4 +550,4 @@ DebugMcpServer/
 
 ## License
 
-MIT
+TBD — License to be determined. Please check with the repository owner before using in production.

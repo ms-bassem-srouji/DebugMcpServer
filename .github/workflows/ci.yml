@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: |
+          dotnet restore src/DebugMcpServer/DebugMcpServer.csproj
+          dotnet restore tests/DebugMcpServer.Tests/DebugMcpServer.Tests.csproj
+
+      - name: Build
+        run: dotnet build src/DebugMcpServer/DebugMcpServer.csproj --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test tests/DebugMcpServer.Tests/DebugMcpServer.Tests.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: '**/TestResults/*.trx'
+          retention-days: 7
+
+      - name: Pack (verify)
+        run: dotnet pack src/DebugMcpServer/DebugMcpServer.csproj --no-build --configuration Release --output ./artifacts
+
+      - name: Upload NuGet package
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-package-${{ matrix.os }}
+          path: ./artifacts/*.nupkg
+          retention-days: 7

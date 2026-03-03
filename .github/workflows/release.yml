@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Build
+        run: >
+          dotnet build src/DebugMcpServer/DebugMcpServer.csproj
+          --configuration Release
+          /p:Version=${{ steps.version.outputs.VERSION }}
+
+      - name: Test
+        run: >
+          dotnet test tests/DebugMcpServer.Tests/DebugMcpServer.Tests.csproj
+          --no-build
+          --configuration Release
+          --verbosity normal
+
+      - name: Pack
+        run: >
+          dotnet pack src/DebugMcpServer/DebugMcpServer.csproj
+          --no-build
+          --configuration Release
+          /p:Version=${{ steps.version.outputs.VERSION }}
+          --output ./artifacts
+
+      - name: Push to NuGet
+        run: >
+          dotnet nuget push ./artifacts/*.nupkg
+          --api-key ${{ secrets.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
+
+      - name: Publish self-contained binaries
+        run: |
+          rids=("win-x64" "linux-x64" "osx-x64" "osx-arm64")
+          for rid in "${rids[@]}"; do
+            dotnet publish src/DebugMcpServer/DebugMcpServer.csproj \
+              --configuration Release \
+              --runtime "$rid" \
+              --self-contained true \
+              /p:PublishSingleFile=true \
+              /p:Version=${{ steps.version.outputs.VERSION }} \
+              --output "./publish/$rid"
+          done
+
+      - name: Create release archives
+        run: |
+          mkdir -p release-assets
+          VERSION=${{ steps.version.outputs.VERSION }}
+
+          # Windows - zip
+          (cd publish/win-x64 && zip -r "../../release-assets/DebugMcpServer-${VERSION}-win-x64.zip" .)
+
+          # Linux and macOS - tar.gz
+          for rid in linux-x64 osx-x64 osx-arm64; do
+            tar -czf "release-assets/DebugMcpServer-${VERSION}-${rid}.tar.gz" -C "publish/$rid" .
+          done
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: ./release-assets/*
+          body: |
+            ## Install
+
+            ### NuGet (as a .NET tool)
+            ```bash
+            dotnet tool install --global DebugMcpServer --version ${{ steps.version.outputs.VERSION }}
+            ```
+
+            ### Self-contained binaries
+            Download the archive for your platform below and extract:
+            - **Windows x64**: `DebugMcpServer-${{ steps.version.outputs.VERSION }}-win-x64.zip`
+            - **Linux x64**: `DebugMcpServer-${{ steps.version.outputs.VERSION }}-linux-x64.tar.gz`
+            - **macOS x64**: `DebugMcpServer-${{ steps.version.outputs.VERSION }}-osx-x64.tar.gz`
+            - **macOS ARM64**: `DebugMcpServer-${{ steps.version.outputs.VERSION }}-osx-arm64.tar.gz`

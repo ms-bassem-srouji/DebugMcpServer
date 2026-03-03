@@ -10,6 +10,25 @@
     <Optimize>false</Optimize>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>debug-mcp-server</ToolCommandName>
+    <PackageId>DebugMcpServer</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Bassem Srouji</Authors>
+    <Description>MCP server for interactive debugging via the Debug Adapter Protocol (DAP). Attach to processes, set breakpoints, step through code, inspect variables — all through MCP tool calls.</Description>
+
+    <PackageProjectUrl>https://github.com/ms-bassem-srouji/DebugMcpServer</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/ms-bassem-srouji/DebugMcpServer</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>mcp;debugging;dap;debug-adapter-protocol;dotnet-tool;ai;llm</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" />
   </ItemGroup>
