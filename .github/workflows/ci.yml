@@ -21,21 +21,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 8
+      - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '9.0.x'
 
-      - name: Restore dependencies
-        run: |
-          dotnet restore src/DebugMcpServer/DebugMcpServer.csproj
-          dotnet restore tests/DebugMcpServer.Tests/DebugMcpServer.Tests.csproj
+      - name: Restore
+        run: dotnet restore
 
       - name: Build
-        run: dotnet build src/DebugMcpServer/DebugMcpServer.csproj --no-restore --configuration Release
+        run: dotnet build --no-restore --configuration Release
 
       - name: Test
-        run: dotnet test tests/DebugMcpServer.Tests/DebugMcpServer.Tests.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=test-results.trx"
+        run: dotnet test --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=test-results.trx"
 
       - name: Upload test results
         if: always()

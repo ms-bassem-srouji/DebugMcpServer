@@ -19,32 +19,20 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.x'
+          dotnet-version: '9.0.x'
 
       - name: Extract version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
       - name: Build
-        run: >
-          dotnet build src/DebugMcpServer/DebugMcpServer.csproj
-          --configuration Release
-          /p:Version=${{ steps.version.outputs.VERSION }}
+        run: dotnet build --configuration Release /p:Version=${{ steps.version.outputs.VERSION }}
 
       - name: Test
-        run: >
-          dotnet test tests/DebugMcpServer.Tests/DebugMcpServer.Tests.csproj
-          --no-build
-          --configuration Release
-          --verbosity normal
+        run: dotnet test --no-build --configuration Release --verbosity normal
 
       - name: Pack
-        run: >
-          dotnet pack src/DebugMcpServer/DebugMcpServer.csproj
-          --no-build
-          --configuration Release
-          /p:Version=${{ steps.version.outputs.VERSION }}
-          --output ./artifacts
+        run: dotnet pack src/DebugMcpServer/DebugMcpServer.csproj --no-build --configuration Release /p:Version=${{ steps.version.outputs.VERSION }} --output ./artifacts
 
       - name: Push to NuGet
         run: >
