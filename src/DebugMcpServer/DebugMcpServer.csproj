@@ -17,7 +17,7 @@
     <Version>0.1.0</Version>
     <Authors>Bassem Srouji</Authors>
     <Description>MCP server for interactive debugging via the Debug Adapter Protocol (DAP). Attach to processes, set breakpoints, step through code, inspect variables — all through MCP tool calls.</Description>
-
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/ms-bassem-srouji/DebugMcpServer</PackageProjectUrl>
     <RepositoryUrl>https://github.com/ms-bassem-srouji/DebugMcpServer</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <None Include="../../LICENSE" Pack="true" PackagePath="/" />
   </ItemGroup>
 
   <ItemGroup>

@@ -552,4 +552,4 @@ DebugMcpServer/
 
 ## License
 
-TBD — License to be determined. Please check with the repository owner before using in production.
+MIT
