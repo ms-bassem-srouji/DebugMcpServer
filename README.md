@@ -60,7 +60,7 @@ dotnet build
 
 ### Configure
 
-Edit `src/DebugMcpServer/appsettings.json` to set your adapter paths:
+Create a config file at `~/.config/debug-mcp-server/appsettings.json` with your adapter paths:
 
 ```json
 {
@@ -72,6 +72,8 @@ Edit `src/DebugMcpServer/appsettings.json` to set your adapter paths:
   }
 }
 ```
+
+This user-level config overrides the bundled defaults and is preserved across tool updates. If you built from source, you can also edit `src/DebugMcpServer/appsettings.json` directly.
 
 ### MCP Client Configuration
 

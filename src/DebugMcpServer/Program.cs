@@ -18,9 +18,18 @@ internal static class Program
             using IHost host = Host.CreateDefaultBuilder(args)
                 .ConfigureAppConfiguration(builder =>
                 {
+                    // Bundled defaults (shipped with the tool)
                     builder
                         .SetBasePath(AppContext.BaseDirectory)
                         .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false);
+
+                    // User-level overrides: ~/.config/debug-mcp-server/appsettings.json
+                    var userConfigDir = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                        ".config", "debug-mcp-server");
+                    builder.AddJsonFile(
+                        Path.Combine(userConfigDir, "appsettings.json"),
+                        optional: true, reloadOnChange: false);
                 })
                 .ConfigureLogging(logging =>
                 {
