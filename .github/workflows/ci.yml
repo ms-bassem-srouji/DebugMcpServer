@@ -64,7 +64,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         id: coverage
         run: |
-          COVERAGE=$(jq '.summary.linerate * 100 | floor' coveragereport/Summary.json)
+          COVERAGE=$(jq '.summary.linecoverage | floor' coveragereport/Summary.json)
           echo "percentage=$COVERAGE" >> $GITHUB_OUTPUT
 
       - name: Update Coverage Badge
