@@ -9,7 +9,6 @@ on:
 
 permissions:
   contents: read
-  checks: write
 
 jobs:
   build-and-test:
@@ -36,14 +35,6 @@ jobs:
 
       - name: Test
         run: dotnet test --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage"
-
-      - name: Test Report
-        uses: dorny/test-reporter@v1
-        if: always()
-        with:
-          name: 'Test Results (${{ matrix.os }})'
-          path: '**/test-results.trx'
-          reporter: dotnet-trx
 
       - name: Upload test results
         if: always()
