@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  checks: write
 
 jobs:
   build-and-test:
@@ -33,7 +34,15 @@ jobs:
         run: dotnet build --no-restore --configuration Release
 
       - name: Test
-        run: dotnet test --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=test-results.trx"
+        run: dotnet test --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage"
+
+      - name: Test Report
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: 'Test Results (${{ matrix.os }})'
+          path: '**/test-results.trx'
+          reporter: dotnet-trx
 
       - name: Upload test results
         if: always()
@@ -42,6 +51,34 @@ jobs:
           name: test-results-${{ matrix.os }}
           path: '**/TestResults/*.trx'
           retention-days: 7
+
+      - name: Generate Coverage Report
+        if: matrix.os == 'ubuntu-latest'
+        uses: danielpalme/ReportGenerator-GitHub-Action@5
+        with:
+          reports: '**/coverage.cobertura.xml'
+          targetdir: 'coveragereport'
+          reporttypes: 'JsonSummary'
+
+      - name: Extract Coverage Percentage
+        if: matrix.os == 'ubuntu-latest'
+        id: coverage
+        run: |
+          COVERAGE=$(jq '.summary.linerate * 100 | floor' coveragereport/Summary.json)
+          echo "percentage=$COVERAGE" >> $GITHUB_OUTPUT
+
+      - name: Update Coverage Badge
+        if: matrix.os == 'ubuntu-latest' && github.ref == 'refs/heads/main'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_TOKEN }}
+          gistID: a158c95708696822a98f735f35d18eae
+          filename: coverage.json
+          label: coverage
+          message: ${{ steps.coverage.outputs.percentage }}%
+          valColorRange: ${{ steps.coverage.outputs.percentage }}
+          minColorRange: 0
+          maxColorRange: 100
 
       - name: Pack (verify)
         run: dotnet pack src/DebugMcpServer/DebugMcpServer.csproj --no-build --configuration Release --output ./artifacts
