@@ -2,6 +2,7 @@
 [![NuGet](https://img.shields.io/nuget/v/DebugMcpServer.svg)](https://www.nuget.org/packages/DebugMcpServer)
 [![Tests](https://img.shields.io/badge/tests-257%2B%20passed-brightgreen)](https://github.com/ms-bassem-srouji/DebugMcpServer/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ms-bassem-srouji/a158c95708696822a98f735f35d18eae/raw/coverage.json)](https://github.com/ms-bassem-srouji/DebugMcpServer/actions/workflows/ci.yml)
+[![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macOS-blue)](https://github.com/ms-bassem-srouji/DebugMcpServer)
 
 # Debug MCP Server
 

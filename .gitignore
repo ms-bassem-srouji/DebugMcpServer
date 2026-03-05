@@ -36,7 +36,8 @@ launchSettings.json
 *.trx
 *.coverage
 *.coveragexml
-
+coveragereport/*
+coveragereport_detail/*
 ## OS files
 Thumbs.db
 ehthumbs.db

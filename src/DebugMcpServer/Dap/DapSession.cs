@@ -10,7 +10,9 @@ namespace DebugMcpServer.Dap;
 
 internal sealed class DapSession : IDapSession
 {
-    private readonly Process _adapterProcess;
+    private readonly Process? _adapterProcess;
+    private readonly Stream _inputStream;
+    private readonly Stream _outputStream;
     private readonly ILogger _logger;
     private readonly CancellationTokenSource _sessionCts = new();
     private readonly ConcurrentDictionary<int, TaskCompletionSource<JsonNode>> _responseWaiters = new();
@@ -48,6 +50,8 @@ internal sealed class DapSession : IDapSession
     public DapSession(Process adapterProcess, ILogger logger, int maxPendingEvents = 100)
     {
         _adapterProcess = adapterProcess;
+        _inputStream = adapterProcess.StandardInput.BaseStream;
+        _outputStream = adapterProcess.StandardOutput.BaseStream;
         _logger = logger;
         _eventChannel = Channel.CreateBounded<DapEvent>(new BoundedChannelOptions(maxPendingEvents)
         {
@@ -59,6 +63,20 @@ internal sealed class DapSession : IDapSession
             adapterProcess.Id, maxPendingEvents);
     }
 
+    /// <summary>Test-only constructor that uses raw streams instead of a Process.</summary>
+    internal DapSession(Stream inputStream, Stream outputStream, ILogger logger, int maxPendingEvents = 100)
+    {
+        _inputStream = inputStream;
+        _outputStream = outputStream;
+        _logger = logger;
+        _eventChannel = Channel.CreateBounded<DapEvent>(new BoundedChannelOptions(maxPendingEvents)
+        {
+            FullMode = BoundedChannelFullMode.DropOldest,
+            SingleReader = false,
+            SingleWriter = true
+        });
+    }
+
     public void StartReaderLoop()
     {
         _logger.LogInformation("[DapSession] Starting reader loop");
@@ -67,10 +85,10 @@ internal sealed class DapSession : IDapSession
 
     private async Task ReaderLoopAsync()
     {
-        _logger.LogInformation("[DapSession.ReaderLoop] Started on adapter PID={Pid}", _adapterProcess.Id);
+        _logger.LogInformation("[DapSession.ReaderLoop] Started on adapter PID={Pid}", _adapterProcess?.Id ?? 0);
         try
         {
-            var stream = _adapterProcess.StandardOutput.BaseStream;
+            var stream = _outputStream;
             int messageCount = 0;
             while (!_sessionCts.IsCancellationRequested)
             {
@@ -246,8 +264,6 @@ internal sealed class DapSession : IDapSession
         {
             var args = message["arguments"];
             var argsArray = args?["args"] as JsonArray;
-            var cwd = args?["cwd"]?.GetValue<string>();
-            var kind = args?["kind"]?.GetValue<string>() ?? "integrated"; // "integrated" or "external"
 
             if (argsArray == null || argsArray.Count == 0)
             {
@@ -256,7 +272,6 @@ internal sealed class DapSession : IDapSession
                 return;
             }
 
-            // Build command line from args array
             var executable = argsArray[0]?.GetValue<string>() ?? "";
             var cmdArgs = string.Join(" ", argsArray.Skip(1).Select(a =>
             {
@@ -264,14 +279,15 @@ internal sealed class DapSession : IDapSession
                 return s.Contains(' ') ? $"\"{s}\"" : s;
             }));
 
-            _logger.LogInformation("[DapSession] runInTerminal: kind={Kind}, exe={Exe}, args={Args}, cwd={Cwd}",
-                kind, executable, cmdArgs, cwd ?? "(null)");
+            var cwd = args?["cwd"]?.GetValue<string>();
 
-            // Launch in a new terminal window using cmd /c start
+            _logger.LogInformation("[DapSession] runInTerminal: exe={Exe}, args={Args}, cwd={Cwd}",
+                executable, cmdArgs, cwd ?? "(null)");
+
             var psi = new ProcessStartInfo
             {
-                FileName = "cmd.exe",
-                Arguments = $"/c start \"Debug Target\" cmd /k \"\"{executable}\" {cmdArgs}\"",
+                FileName = executable,
+                Arguments = cmdArgs,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
@@ -292,7 +308,7 @@ internal sealed class DapSession : IDapSession
             var process = Process.Start(psi);
             var pid = process?.Id ?? 0;
 
-            _logger.LogInformation("[DapSession] runInTerminal: launched terminal, PID={Pid}", pid);
+            _logger.LogInformation("[DapSession] runInTerminal: launched process PID={Pid}", pid);
 
             await SendReverseResponseAsync(requestSeq, "runInTerminal", true, null, pid);
         }
@@ -429,7 +445,7 @@ internal sealed class DapSession : IDapSession
         await _writeLock.WaitAsync(ct);
         try
         {
-            var stream = _adapterProcess.StandardInput.BaseStream;
+            var stream = _inputStream;
             await stream.WriteAsync(headerBytes, ct);
             await stream.WriteAsync(jsonBytes, ct);
             await stream.FlushAsync(ct);
@@ -448,24 +464,29 @@ internal sealed class DapSession : IDapSession
         if (_disposed) return;
         _disposed = true;
 
-        _logger.LogInformation("[DapSession] Disposing. Adapter PID={Pid}, HasExited={HasExited}",
-            _adapterProcess.Id, _adapterProcess.HasExited);
-
         _sessionCts.Cancel();
-        try
+
+        if (_adapterProcess != null)
         {
-            if (!_adapterProcess.HasExited)
+            _logger.LogInformation("[DapSession] Disposing. Adapter PID={Pid}, HasExited={HasExited}",
+                _adapterProcess.Id, _adapterProcess.HasExited);
+
+            try
             {
-                _logger.LogInformation("[DapSession] Killing adapter process tree");
-                _adapterProcess.Kill(entireProcessTree: true);
+                if (!_adapterProcess.HasExited)
+                {
+                    _logger.LogInformation("[DapSession] Killing adapter process tree");
+                    _adapterProcess.Kill(entireProcessTree: true);
+                }
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "[DapSession] Error killing adapter process");
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[DapSession] Error killing adapter process");
+            }
+
+            _adapterProcess.Dispose();
         }
 
-        _adapterProcess.Dispose();
         _sessionCts.Dispose();
         _writeLock.Dispose();
         EventConsumerLock.Dispose();

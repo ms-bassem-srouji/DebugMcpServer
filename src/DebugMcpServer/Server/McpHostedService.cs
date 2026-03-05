@@ -42,12 +42,17 @@ internal sealed class McpHostedService : IHostedService
 
     private async Task RunServerAsync(CancellationToken cancellationToken)
     {
+        using var stdin = Console.OpenStandardInput();
+        using var stdout = Console.OpenStandardOutput();
+        await RunServerAsync(stdin, stdout, cancellationToken);
+    }
+
+    internal async Task RunServerAsync(Stream stdin, Stream stdout, CancellationToken cancellationToken)
+    {
         try
         {
-            using var stdin = Console.OpenStandardInput();
-            using var stdout = Console.OpenStandardOutput();
-            using var reader = new StreamReader(stdin);
-            using var writer = new StreamWriter(stdout) { AutoFlush = true };
+            using var reader = new StreamReader(stdin, leaveOpen: true);
+            using var writer = new StreamWriter(stdout, leaveOpen: true) { AutoFlush = true };
 
             _logger.LogInformation("MCP Server v{Version} ready — listening on stdin/stdout (concurrent request processing enabled)", ServerVersion);
 
@@ -98,7 +103,7 @@ internal sealed class McpHostedService : IHostedService
         }
     }
 
-    private async Task ProcessRequestAsync(JsonNode request, StreamWriter writer, CancellationToken cancellationToken)
+    internal async Task ProcessRequestAsync(JsonNode request, StreamWriter writer, CancellationToken cancellationToken)
     {
         try
         {
