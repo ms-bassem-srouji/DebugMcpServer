@@ -140,9 +140,25 @@ int main(int argc, char* argv[]) {
 #endif
     );
 
-    // Seed random number generator
-    std::mt19937 rng(static_cast<unsigned>(time(nullptr)));
-    g_seed = static_cast<int>(rng());
+    // Seed random number generator — use --seed N for deterministic data
+    unsigned userSeed = static_cast<unsigned>(time(nullptr));
+    for (int i = 1; i < argc - 1; i++) {
+        if (strcmp(argv[i], "--seed") == 0) {
+            userSeed = static_cast<unsigned>(atoi(argv[i + 1]));
+            break;
+        }
+    }
+    // Also support --output for dump path
+    const char* outputPath = nullptr;
+    for (int i = 1; i < argc - 1; i++) {
+        if (strcmp(argv[i], "--output") == 0) {
+            outputPath = argv[i + 1];
+            break;
+        }
+    }
+
+    std::mt19937 rng(userSeed);
+    g_seed = static_cast<int>(userSeed);
     printf("Random seed: %d\n\n", g_seed);
 
     // Generate random number of orders (3-8)
@@ -200,20 +216,27 @@ int main(int argc, char* argv[]) {
 
     // Determine dump path or wait mode
     std::string dumpPath;
-    if (argc > 1 && strcmp(argv[1], "--wait") == 0) {
-        printf("Process is running. Capture a dump with:\n");
+
+    // Check for --wait mode
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--wait") == 0) {
+            printf("Process is running. Capture a dump with:\n");
 #ifdef _WIN32
-        printf("  procdump -ma %d native_crash.dmp\n", (int)GetCurrentProcessId());
+            printf("  procdump -ma %d native_crash.dmp\n", (int)GetCurrentProcessId());
 #else
-        printf("  gcore %d\n", getpid());
+            printf("  gcore %d\n", getpid());
 #endif
-        printf("\nPress Enter to exit...\n");
-        getchar();
-        return 0;
+            printf("\nPress Enter to exit...\n");
+            getchar();
+            return 0;
+        }
     }
 
+    // Use --output path or generate default
+    if (outputPath) {
+        dumpPath = outputPath;
+    } else {
 #ifdef _WIN32
-    // Build dump path next to executable
     char exePath[MAX_PATH];
     GetModuleFileNameA(nullptr, exePath, MAX_PATH);
     dumpPath = exePath;
@@ -228,6 +251,7 @@ int main(int argc, char* argv[]) {
     snprintf(pidStr, sizeof(pidStr), "native_crash_%d.core", getpid());
     dumpPath = pidStr;
 #endif
+    } // end if(outputPath) else
 
     // Keep locals alive
     (void)activeOrderId;

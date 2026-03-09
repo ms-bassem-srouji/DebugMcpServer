@@ -65,7 +65,11 @@ public class LoadNativeDumpToolTests
             NullLogger<LoadNativeDumpTool>.Instance);
 
         var result = await tool.ExecuteAsync(JsonValue.Create(1), JsonNode.Parse("""{}"""), CancellationToken.None);
-        result["error"].Should().NotBeNull();
+        // On Linux: returns "Windows only" text error
+        // On Windows: returns JSON-RPC error for missing dumpPath
+        var hasJsonRpcError = result["error"] != null;
+        var hasTextError = result["result"]?["isError"]?.GetValue<bool>() == true;
+        (hasJsonRpcError || hasTextError).Should().BeTrue();
     }
 
     [TestMethod]
@@ -150,7 +154,11 @@ public class NativeDumpCommandToolTests
 
         var result = await tool.ExecuteAsync(JsonValue.Create(1),
             JsonNode.Parse("""{"sessionId":"x"}"""), CancellationToken.None);
-        result["error"].Should().NotBeNull();
+        // On Linux: returns "Windows only" text error
+        // On Windows: returns JSON-RPC error for missing command
+        var hasJsonRpcError = result["error"] != null;
+        var hasTextError = result["result"]?["isError"]?.GetValue<bool>() == true;
+        (hasJsonRpcError || hasTextError).Should().BeTrue();
     }
 
     [TestMethod]

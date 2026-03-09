@@ -34,9 +34,19 @@ internal static class Program
         Console.WriteLine($"Platform: {RuntimeInformation.RuntimeIdentifier}");
         Console.WriteLine();
 
-        // Generate random orders
-        var rng = new Random();
-        _randomSeed = rng.Next();
+        // Parse --seed N for deterministic data
+        _randomSeed = 0;
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] == "--seed" && int.TryParse(args[i + 1], out var seed))
+            {
+                _randomSeed = seed;
+                break;
+            }
+        }
+
+        var rng = _randomSeed != 0 ? new Random(_randomSeed) : new Random();
+        if (_randomSeed == 0) _randomSeed = rng.Next();
         Console.WriteLine($"Random seed: {_randomSeed}");
         Console.WriteLine();
 
@@ -87,10 +97,16 @@ internal static class Program
 
         // Default: write a minidump of ourselves
         var dumpPath = Path.Combine(AppContext.BaseDirectory, $"crash_{Environment.ProcessId}.dmp");
+        // Allow --output to override path
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] == "--output") { dumpPath = args[i + 1]; break; }
+        }
+        bool heapOnly = args.Contains("--heap-only");
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            return WriteMiniDumpWindows(dumpPath, activeOrder, totalValue, itemCount);
+            return WriteMiniDumpWindows(dumpPath, activeOrder, totalValue, itemCount, heapOnly);
         }
         else
         {
@@ -109,7 +125,7 @@ internal static class Program
         return 0;
     }
 
-    private static int WriteMiniDumpWindows(string dumpPath, Order activeOrder, decimal totalValue, int itemCount)
+    private static int WriteMiniDumpWindows(string dumpPath, Order activeOrder, decimal totalValue, int itemCount, bool _heapOnly = false)
     {
         // Keep these locals alive in the frame for dump inspection
         _ = activeOrder;
@@ -119,11 +135,13 @@ internal static class Program
         using var fs = new FileStream(dumpPath, FileMode.Create, FileAccess.ReadWrite);
         var process = Process.GetCurrentProcess();
 
+        uint dumpType = NativeMethods.MiniDumpWithFullMemory;
+
         bool success = NativeMethods.MiniDumpWriteDump(
             process.Handle,
             (uint)Environment.ProcessId,
             fs.SafeFileHandle.DangerousGetHandle(),
-            NativeMethods.MiniDumpWithFullMemory,
+            dumpType,
             IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
 
         if (!success)
@@ -215,6 +233,7 @@ internal static class Program
     private static class NativeMethods
     {
         // MiniDumpWithFullMemory: captures all accessible memory (largest dump, most data for debugging)
+        // MiniDumpWithFullMemory: captures all memory (needed for ClrMD heap analysis)
         public const uint MiniDumpWithFullMemory = 0x00000002;
 
         [DllImport("dbghelp.dll", SetLastError = true)]

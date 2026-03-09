@@ -34,7 +34,7 @@ jobs:
         run: dotnet build --no-restore --configuration Release
 
       - name: Test
-        run: dotnet test --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage"
+        run: dotnet test --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage" ${{ matrix.os == 'ubuntu-latest' && '--filter "TestCategory!=WindowsOnly"' || '' }}
 
       - name: Upload test results
         if: always()
