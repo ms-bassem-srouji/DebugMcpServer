@@ -14,6 +14,7 @@ Attach to running processes, set breakpoints, step through code, inspect variabl
 
 - **Multi-adapter support** — Configure multiple debug adapters (netcoredbg, debugpy, js-debug, cpptools) and select which one to use per session
 - **Full debugging workflow** — Attach/launch, breakpoints (line, conditional, function, exception, data), stepping, variable inspection, expression evaluation
+- **Dump file debugging** — Load crash dumps and core dumps for post-mortem analysis with stack traces, variable inspection, memory reads, and disassembly
 - **Parallel sessions** — Debug multiple processes simultaneously with concurrent request processing
 - **Remote debugging** — Debug processes on remote machines via SSH with zero additional setup
 - **Memory access** — Read and write raw memory at arbitrary addresses
@@ -274,6 +275,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 | `detach_session` | Disconnect debugger, process continues running |
 | `terminate_process` | Kill the debugged process and end the session |
 | `list_sessions` | List all active debug sessions with state |
+| `load_dump_file` | Load a crash dump or core dump for post-mortem debugging |
 
 ### Breakpoints
 
@@ -310,6 +312,8 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 | `list_threads` | List all threads |
 | `change_thread` | Switch active thread |
 | `get_modules` | List loaded modules/assemblies |
+| `disassemble` | Disassemble machine code at a memory address |
+| `get_loaded_sources` | List all source files the adapter knows about |
 
 ### Memory
 
@@ -323,6 +327,28 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 | Tool | Description |
 |------|-------------|
 | `send_dap_request` | Send any arbitrary DAP command directly |
+
+### .NET Dump Analysis (ClrMD)
+
+| Tool | Description |
+|------|-------------|
+| `load_dotnet_dump` | Load a .NET dump file for analysis (uses ClrMD — no external tools required) |
+| `dotnet_dump_threads` | List all managed threads with stack traces |
+| `dotnet_dump_exceptions` | Show exceptions on all threads with inner exception chain |
+| `dotnet_dump_stack_objects` | Show objects on a thread's stack (locals, params, `this` pointers) |
+| `dotnet_dump_heap_stats` | Heap statistics — object counts and sizes by type (filterable) |
+| `dotnet_dump_find_objects` | Find all instances of a type on the heap with addresses |
+| `dotnet_dump_inspect` | Inspect a .NET object at a given address (fields, arrays, strings) |
+| `dotnet_dump_gc_roots` | Find GC roots keeping an object alive (memory leak diagnosis) |
+| `dotnet_dump_memory_stats` | GC heap overview: generation sizes, segments, committed memory |
+| `dotnet_dump_async_state` | Analyze async Tasks and state machines (deadlock diagnosis) |
+
+### Native Dump Analysis (DbgEng — Windows only)
+
+| Tool | Description |
+|------|-------------|
+| `load_native_dump` | Load a Windows `.dmp` file for native analysis (uses dbgeng.dll — the WinDbg engine) |
+| `native_dump_command` | Run any WinDbg command (k, ~*k, dv, r, lm, u, dd, !analyze -v, etc.) |
 
 ## Sample Prompts
 
@@ -422,6 +448,42 @@ These are natural language prompts you can give to your AI assistant. The assist
 >
 > **You:** "Debug the MyApp process on the staging server via SSH"
 
+### Dump File Debugging
+
+> **You:** "Load the crash dump at /tmp/core.12345 using the cpp adapter"
+>
+> **You:** "Show me the call stack from this dump file"
+>
+> **You:** "What threads were running when this crash happened?"
+>
+> **You:** "Disassemble 20 instructions at the crash address"
+>
+> **You:** "What are the local variables at the crash site?"
+>
+> **You:** "Show me the loaded source files in this dump"
+
+### .NET Dump Analysis
+
+> **You:** "Open the .NET crash dump at crash_12345.dmp"
+>
+> **You:** "Show me the managed stack traces for all threads"
+>
+> **You:** "What exception caused the crash?"
+>
+> **You:** "What objects were on the crashing thread's stack?"
+>
+> **You:** "Show me heap statistics — what types are using the most memory?"
+>
+> **You:** "Find all instances of MyApp.Order on the heap and show me their fields"
+>
+> **You:** "What's keeping this object alive? Show me the GC roots"
+>
+> **You:** "How much memory is the GC heap using? Show me generation sizes"
+>
+> **You:** "Are there any stuck async tasks? Show me the async state"
+>
+> **You:** "I think we have an async deadlock — show me all tasks that are WaitingForActivation"
+
 ### Advanced Workflows
 
 > **You:** "Attach to the MyApp process, set a breakpoint when `orderTotal > 1000` on line 55 of CheckoutService.cs, then resume and wait for it to hit"
@@ -458,6 +520,66 @@ For reference, here's how the prompts above map to actual tool calls:
 2. attach_to_process(pid: 5678, host: "user@server", adapter: "dotnet")
 3. ... all tools work the same — DAP flows through SSH
 ```
+
+### Dump File Debugging
+
+```
+1. load_dump_file(dumpPath: "/tmp/core.12345", program: "/app/myapp", adapter: "cpp")
+   → sessionId, process paused at crash site
+2. get_callstack()                           → see crash stack trace
+3. list_threads()                            → see all threads at crash time
+4. get_variables(frameId: 0)                 → inspect locals at crash frame
+5. disassemble(memoryReference: "0x4015a0")  → see assembly at crash address
+6. get_loaded_sources()                      → discover available source files
+7. read_memory(memoryReference: "0x7ffd1000") → examine raw memory
+8. evaluate_expression(expression: "strlen(buffer)")
+9. detach_session()                          → done
+```
+
+Supported adapters and dump formats:
+
+| Adapter | Config Name | Dump Formats | License |
+|---------|------------|--------------|---------|
+| netcoredbg | `dotnet` | Linux/macOS .NET core dumps | MIT |
+| cpptools (OpenDebugAD7) | `cpp` | Linux core dumps | VS Code Extension |
+| lldb-dap | `lldb` | Core dumps, Mach-O cores | Open source |
+| **ClrMD** (built-in) | *(no config)* | **.NET dumps on any platform** | **MIT** |
+
+#### Platform guidance for dump debugging
+
+| Dump Type | Platform | Approach |
+|-----------|----------|----------|
+| **.NET dump** | Any | `load_dotnet_dump` — ClrMD built-in, no config needed (threads, exceptions, heap, GC roots) |
+| **.NET core dump** | Linux/macOS | `load_dump_file` with `dotnet` adapter — full DAP debugging (variables, expressions) |
+| **Native C/C++ core dump** | Linux/macOS | `load_dump_file` with `cpp` or `lldb` adapter — DAP debugging |
+| **Native C/C++ `.dmp`** | Windows | **Not supported** — see note below |
+
+> **Why two approaches?** DAP debugging (via `load_dump_file`) gives structured variable inspection, source mapping, and expression evaluation — but needs a compatible debug adapter. ClrMD (via `load_dotnet_dump`) provides .NET-specific deep analysis (heap stats, GC roots, exception chains) directly as a built-in library — no external tools or configuration needed.
+
+> **Windows native `.dmp` files are not supported.** Microsoft's vsdbg/cppvsdbg adapter can open Windows `.dmp` files but has a restrictive license (Visual Studio/VS Code use only) and uses a non-standard DAP protocol flow that is not compatible with this MCP server. For Windows native dump analysis, use WinDbg or Visual Studio directly. For .NET dumps on Windows, `load_dotnet_dump` (ClrMD) works fully.
+
+Execution control tools (`continue`, `step_*`, `pause`) are automatically blocked on dump sessions with a clear error message.
+
+### .NET Dump Analysis (ClrMD)
+
+For .NET dumps, use the built-in ClrMD integration (MIT-licensed, no external tools required):
+
+```
+1. load_dotnet_dump(dumpPath: "crash_12345.dmp")
+   → sessionId + runtime info (threads, exceptions, app domains)
+2. dotnet_dump_threads()                          → all managed threads with stack traces
+3. dotnet_dump_exceptions()                       → exceptions with type, message, inner chain
+4. dotnet_dump_stack_objects(osThreadId: "0x9F64") → objects on the crashing thread's stack
+5. dotnet_dump_heap_stats(filter: "Order")         → find specific types on the heap
+6. dotnet_dump_find_objects(typeName: "Order")     → get addresses of all Order instances
+7. dotnet_dump_inspect(address: "0x7fff..")        → object fields, array elements, string values
+8. dotnet_dump_gc_roots(address: "0x7fff..")       → what's keeping this object alive?
+9. dotnet_dump_memory_stats()                      → GC generation sizes, committed memory
+10. dotnet_dump_async_state()                      → async Tasks status, stuck awaits
+11. detach_session()                               → close session
+```
+
+Powered by [Microsoft.Diagnostics.Runtime (ClrMD)](https://github.com/microsoft/clrmd) — the same library that `dotnet-dump` and Visual Studio use internally. No external tools to install.
 
 Requires SSH key-based authentication (password auth is not supported since the MCP server runs non-interactively).
 
@@ -498,9 +620,23 @@ MCP Client (Claude, etc.)
 └───────────────────────────────┘
 ```
 
+## Security
+
+The MCP server **only executes debug adapter processes that are explicitly configured** in `appsettings.json` by the user. It does not auto-discover, download, or execute binaries from arbitrary locations.
+
+- **No auto-discovery**: The server will not scan your system to find debug adapters. Every adapter must be explicitly configured by the user.
+- **Two path modes supported**:
+  - **Full path** (e.g., `/usr/local/bin/netcoredbg`): The server verifies the file exists. `list_adapters` shows `"status": "found"` or `"not_found"`.
+  - **Bare command name** (e.g., `netcoredbg`): The user has placed the adapter on their PATH. The server passes it to `Process.Start` which resolves it from PATH. `list_adapters` shows `"status": "bare_command"` since the server cannot verify PATH resolution without executing the binary.
+- **No remote code execution**: Debug adapters run as local child processes with the same permissions as the MCP server. SSH remote debugging connects to a user-specified host only.
+- **Adapter diagnostics**: Use `list_adapters` to see the status of every configured adapter, install hints for missing ones, and the config file location.
+- **User config overrides**: User-level config (`~/.config/debug-mcp-server/appsettings.json`) takes precedence over bundled defaults.
+
 ## Configuration
 
 ### `appsettings.json`
+
+The default config ships with bare command names — if the adapter is on your PATH, it works out of the box. Override with full paths in your user config for explicit control.
 
 ```json
 {
@@ -508,9 +644,16 @@ MCP Client (Claude, etc.)
     "Adapters": [
       {
         "Name": "dotnet",
-        "Path": "C:\\tools\\netcoredbg\\netcoredbg.exe",
+        "Path": "netcoredbg",
         "AdapterID": "coreclr",
-        "RemotePath": "/usr/local/bin/netcoredbg"
+        "RemotePath": "/usr/local/bin/netcoredbg",
+        "DumpArgumentName": "coreDumpPath"
+      },
+      {
+        "Name": "cpp",
+        "Path": "OpenDebugAD7",
+        "AdapterID": "cppdbg",
+        "DumpArgumentName": "coreDumpPath"
       }
     ],
     "AttachTimeoutSeconds": 30,
@@ -521,12 +664,26 @@ MCP Client (Claude, etc.)
 }
 ```
 
+User-level overrides (`~/.config/debug-mcp-server/appsettings.json`) can use full paths:
+
+```json
+{
+  "Debug": {
+    "Adapters": [
+      { "Name": "dotnet", "Path": "/usr/local/bin/netcoredbg", "AdapterID": "coreclr", "DumpArgumentName": "coreDumpPath" },
+      { "Name": "cppvsdbg", "Path": "C:\\Program Files\\VS\\vsdbg.exe", "AdapterID": "cppvsdbg", "DumpArgumentName": "dumpPath" }
+    ]
+  }
+}
+```
+
 | Field | Description |
 |-------|-------------|
 | `Adapters[].Name` | Friendly name used in tool calls |
-| `Adapters[].Path` | Local path to the debug adapter executable |
+| `Adapters[].Path` | Path to the debug adapter executable. Supports full paths (e.g., `/usr/local/bin/netcoredbg`) or bare command names (e.g., `netcoredbg`) if the adapter is on your PATH. |
 | `Adapters[].AdapterID` | DAP adapter identifier (e.g., `coreclr`, `python`, `node`) |
 | `Adapters[].RemotePath` | Adapter path on remote machines (used with SSH) |
+| `Adapters[].DumpArgumentName` | DAP launch argument name for dump file path (e.g., `coreDumpPath`, `coreFile`, `dumpPath`). Required for `load_dump_file` support. |
 | `AttachTimeoutSeconds` | Max time to wait for adapter during attach/launch |
 | `MaxPendingEvents` | Event channel buffer size per session |
 
@@ -550,8 +707,55 @@ DebugMcpServer/
 ├── tests/DebugMcpServer.Tests/
 │   ├── Fakes/                # FakeSession, FakeSessionRegistry
 │   └── Tests/                # Unit tests for every tool
-└── samples/SampleTarget/     # Sample .NET app for testing
+└── samples/
+    ├── SampleTarget/          # Sample .NET app for live debugging
+    ├── CrashTarget/           # .NET app that generates a self-dump for testing
+    └── NativeCrashTarget/     # C++ app that generates a native dump (CMake)
 ```
+
+## FAQ
+
+### Which adapter do I use for dump files?
+
+| Dump type | Platform | Tool | Config needed? |
+|-----------|----------|------|----------------|
+| **.NET dump** | Any | `load_dotnet_dump` | No — ClrMD is built-in |
+| **Windows `.dmp` (native C/C++)** | Windows | `load_native_dump` | No — DbgEng is built into Windows |
+| **Linux/macOS .NET core dump** | Linux/macOS | `load_dump_file` with `dotnet` | Yes — netcoredbg path |
+| **Linux core dump (C/C++)** | Linux | `load_dump_file` with `cpp` | Yes — OpenDebugAD7 path |
+| **macOS Mach-O core** | macOS | `load_dump_file` with `lldb` | Yes — lldb-dap path |
+
+> **Zero-config on Windows:** Both .NET and native Windows dumps work out of the box — no adapters to install or configure. ClrMD and DbgEng are built-in.
+
+### Where do I find the adapter executables?
+
+| Adapter | Typical location |
+|---------|-----------------|
+| **OpenDebugAD7 (cpp)** | `~/.vscode/extensions/ms-vscode.cpptools-*/debugAdapters/bin/OpenDebugAD7` |
+| **netcoredbg (dotnet)** | Download from [github.com/Samsung/netcoredbg](https://github.com/Samsung/netcoredbg/releases) |
+| **debugpy (python)** | `pip install debugpy`, adapter at `python -m debugpy.adapter` |
+| **lldb-dap (lldb)** | `apt install lldb` or `brew install llvm` |
+
+### How do I configure an adapter?
+
+Add adapter paths to `~/.config/debug-mcp-server/appsettings.json` (user config, not tracked by git):
+
+```json
+{
+  "Debug": {
+    "Adapters": [
+      { "Name": "dotnet", "Path": "/usr/local/bin/netcoredbg", "AdapterID": "coreclr", "DumpArgumentName": "coreDumpPath" },
+      { "Name": "cpp", "Path": "/path/to/OpenDebugAD7", "AdapterID": "cppdbg", "DumpArgumentName": "coreDumpPath" }
+    ]
+  }
+}
+```
+
+Use `list_adapters` to verify your configuration — it shows which adapters are found, missing, or configured as bare command names.
+
+### Do I need external tools for .NET dump analysis?
+
+**No.** The MCP server includes [ClrMD (Microsoft.Diagnostics.Runtime)](https://github.com/microsoft/clrmd) — the same library that Visual Studio and `dotnet-dump` use internally. Just call `load_dotnet_dump` with a `.dmp` file and use the structured tools (`dotnet_dump_threads`, `dotnet_dump_exceptions`, `dotnet_dump_heap_stats`, etc.). No external tools to install.
 
 ## License
 

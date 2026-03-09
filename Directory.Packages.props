@@ -5,6 +5,8 @@
   <ItemGroup>
     <!-- Main project -->
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.2" />
+    <PackageVersion Include="Microsoft.Diagnostics.Runtime" Version="3.1.512801" />
+    <PackageVersion Include="Microsoft.Debugging.Platform.DbgEng" Version="20260109.1235.0" />
 
     <!-- Test project -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />

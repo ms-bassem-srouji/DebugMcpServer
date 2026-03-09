@@ -44,6 +44,7 @@ internal sealed class DapSession : IDapSession
 
     public ConcurrentDictionary<string, List<SourceBreakpoint>> Breakpoints { get; } = new(StringComparer.OrdinalIgnoreCase);
     public SemaphoreSlim EventConsumerLock { get; } = new(1, 1);
+    public bool IsDumpSession { get; set; }
     public CancellationToken SessionCancellationToken => _sessionCts.Token;
     public ChannelReader<DapEvent> EventChannel => _eventChannel.Reader;
 

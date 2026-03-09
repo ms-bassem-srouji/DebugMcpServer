@@ -43,3 +43,18 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 .DS_Store
+
+## Dump files
+*.dmp
+*.core
+core.*
+
+## Native build (CMake + Linux)
+samples/NativeCrashTarget/build/
+samples/NativeCrashTarget/native_crash_linux
+CMakeCache.txt
+CMakeFiles/
+
+## Test scripts (generated, not tracked)
+samples/generate_linux_dotnet_dump.sh
+samples/NativeCrashTarget/generate_linux_dump.sh

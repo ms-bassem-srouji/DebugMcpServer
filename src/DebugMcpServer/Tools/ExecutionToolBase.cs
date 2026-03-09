@@ -153,4 +153,11 @@ internal abstract class ExecutionToolBase : ToolBase
         => CreateTextResult(id,
             "Cannot execute: the process is currently running. Use pause_execution to pause it first, or wait for a breakpoint to be hit.",
             isError: true);
+
+    protected static JsonNode SessionIsDumpFile(JsonNode? id)
+        => CreateTextResult(id,
+            "Execution control is not available for dump file sessions. " +
+            "Dump files are static snapshots — use inspection tools instead: get_callstack, get_variables, " +
+            "evaluate_expression, read_memory, disassemble, list_threads, get_modules, get_loaded_sources.",
+            isError: true);
 }

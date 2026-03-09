@@ -32,4 +32,7 @@ internal interface IDapSession : IDisposable
 
     /// <summary>Transition session state to Running (after a continue/step command is sent).</summary>
     void TransitionToRunning();
+
+    /// <summary>Whether this session was created from a dump file (execution control is disabled).</summary>
+    bool IsDumpSession { get; set; }
 }

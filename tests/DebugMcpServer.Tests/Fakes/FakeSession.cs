@@ -16,6 +16,7 @@ internal sealed class FakeSession : IDapSession
 
     public int? ActiveThreadId { get; set; }
     public SessionState State { get; set; } = SessionState.Paused;
+    public bool IsDumpSession { get; set; }
     public ConcurrentDictionary<string, List<SourceBreakpoint>> Breakpoints { get; } = new(StringComparer.OrdinalIgnoreCase);
     public SemaphoreSlim EventConsumerLock { get; } = new(1, 1);
     public ChannelReader<DapEvent> EventChannel => _channel.Reader;
