@@ -55,7 +55,8 @@ internal sealed class DotnetDumpFindObjectsTool : ToolBase, IMcpTool
             {
                 if (!obj.IsValid || obj.Type == null) continue;
 
-                if (!obj.Type.Name.Contains(typeName, StringComparison.OrdinalIgnoreCase))
+                var objTypeName = obj.Type.Name ?? "<unknown>";
+                if (!objTypeName.Contains(typeName, StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 totalMatched++;
@@ -65,7 +66,7 @@ internal sealed class DotnetDumpFindObjectsTool : ToolBase, IMcpTool
                     var entry = new JsonObject
                     {
                         ["address"] = $"0x{obj.Address:X}",
-                        ["type"] = obj.Type.Name,
+                        ["type"] = objTypeName,
                         ["size"] = (long)obj.Size
                     };
 

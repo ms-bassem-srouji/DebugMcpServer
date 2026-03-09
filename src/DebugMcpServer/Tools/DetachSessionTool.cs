@@ -54,9 +54,11 @@ internal sealed class DetachSessionTool : ToolBase, IMcpTool
             }
 
             // Try native dump registry
+#pragma warning disable CA1416 // DbgEngSession is Windows-only but registry access is runtime-guarded
             if (_nativeRegistry.TryRemove(sessionId, out var nativeSession) && nativeSession != null)
             {
                 nativeSession.Dispose();
+#pragma warning restore CA1416
                 _logger.LogInformation("Closed native dump session {SessionId}", sessionId);
                 return CreateTextResult(id,
                     $"{{\"outcome\": \"closed\", \"sessionId\": \"{sessionId}\", \"message\": \"Native dump session closed.\"}}");

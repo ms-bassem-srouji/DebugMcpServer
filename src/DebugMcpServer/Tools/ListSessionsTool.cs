@@ -57,6 +57,7 @@ internal sealed class ListSessionsTool : ToolBase, IMcpTool
             });
         }
 
+#pragma warning disable CA1416 // DbgEngSession is Windows-only but accessed through cross-platform registry (runtime-safe)
         foreach (var (sessionId, session) in _nativeRegistry.GetAll())
         {
             sessions.Add(new JsonObject
@@ -67,6 +68,7 @@ internal sealed class ListSessionsTool : ToolBase, IMcpTool
                 ["dumpPath"] = session.DumpPath
             });
         }
+#pragma warning restore CA1416
 
         var result = new JsonObject
         {

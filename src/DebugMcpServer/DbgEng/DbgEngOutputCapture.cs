@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Text;
 
 namespace DebugMcpServer.DbgEng;
@@ -6,6 +7,7 @@ namespace DebugMcpServer.DbgEng;
 /// <summary>
 /// COM-visible implementation of IDebugOutputCallbacks.
 /// Must be a public top-level class for Marshal.GetComInterfaceForObject to work.
+/// Windows only — guarded by [SupportedOSPlatform].
 /// </summary>
 [ComVisible(true)]
 [Guid("4bf58045-d654-4c40-b0af-683090f356dc")]
@@ -18,6 +20,7 @@ public interface IDebugOutputCallbacksManaged
 
 [ComVisible(true)]
 [ClassInterface(ClassInterfaceType.None)]
+[SupportedOSPlatform("windows")]
 public sealed class DbgEngOutputCapture : IDebugOutputCallbacksManaged, IDisposable
 {
     private readonly StringBuilder _output = new();

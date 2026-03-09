@@ -59,7 +59,7 @@ internal sealed class DotnetDumpAsyncStateTool : ToolBase, IMcpTool
                 if (!obj.IsValid || obj.Type == null) continue;
 
                 // Match Task types and async state machines
-                var typeName = obj.Type.Name;
+                var typeName = obj.Type.Name ?? "";
                 bool isTask = typeName.StartsWith("System.Threading.Tasks.Task", StringComparison.Ordinal)
                     && !typeName.Contains("Factory") && !typeName.Contains("Scheduler");
                 // Async state machines are compiler-generated types with names like "<MethodAsync>d__5"

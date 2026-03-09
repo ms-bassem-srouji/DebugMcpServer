@@ -5,7 +5,9 @@ namespace DebugMcpServer.DbgEng;
 
 /// <summary>
 /// Thread-safe registry of active DbgEng native dump sessions.
+/// Cross-platform safe — stores sessions but doesn't call Windows APIs directly.
 /// </summary>
+#pragma warning disable CA1416 // DbgEngSession is Windows-only but registry is cross-platform (runtime-guarded)
 internal sealed class NativeDumpRegistry : IDisposable
 {
     private readonly ConcurrentDictionary<string, DbgEngSession> _sessions = new();

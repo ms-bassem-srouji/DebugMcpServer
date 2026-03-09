@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using Microsoft.Extensions.Logging;
 using static DebugMcpServer.DbgEng.DbgEngNative;
 
@@ -9,6 +10,7 @@ namespace DebugMcpServer.DbgEng;
 /// Wraps Windows DbgEng COM objects for native dump analysis.
 /// All COM operations run on a dedicated STA thread to ensure thread affinity.
 /// </summary>
+[SupportedOSPlatform("windows")]
 internal sealed class DbgEngSession : IDisposable
 {
     private readonly Thread _thread;
