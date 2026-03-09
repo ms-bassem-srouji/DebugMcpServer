@@ -138,7 +138,11 @@ internal sealed class AttachToProcessTool : ToolBase, IMcpTool
         }
 
         // Local: fall through to legacy resolution if no adapter resolved yet
-        if (string.IsNullOrWhiteSpace(resolvedPath) || !File.Exists(resolvedPath))
+        // Skip File.Exists for bare command names (no directory separator) — they'll be resolved from PATH by Process.Start
+        bool isBareCommand = !string.IsNullOrWhiteSpace(resolvedPath)
+            && !resolvedPath.Contains(Path.DirectorySeparatorChar)
+            && !resolvedPath.Contains(Path.AltDirectorySeparatorChar);
+        if (!isBareCommand && (string.IsNullOrWhiteSpace(resolvedPath) || !File.Exists(resolvedPath)))
         {
             _logger.LogInformation("[Attach] Falling back to legacy adapter resolution");
             resolvedPath = ResolveAdapterPath(resolvedPath);
@@ -222,7 +226,8 @@ internal sealed class AttachToProcessTool : ToolBase, IMcpTool
                 pathFormat = "path",
                 supportsVariableType = true,
                 supportsRunInTerminalRequest = false,
-                supportsProgressReporting = false
+                supportsProgressReporting = false,
+                supportsMemoryReferences = true
             }, timeoutCts.Token);
 
             _logger.LogInformation("[Attach] Step 1/9: 'initialize' complete");

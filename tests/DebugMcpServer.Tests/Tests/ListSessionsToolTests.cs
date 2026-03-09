@@ -13,6 +13,9 @@ public class ListSessionsToolTests
     private static string GetText(JsonNode result) =>
         result["result"]!["content"]![0]!["text"]!.GetValue<string>();
 
+    private static ListSessionsTool CreateTool(DapSessionRegistry registry)
+        => new ListSessionsTool(registry, FakeDotnetDumpRegistry.Empty(), FakeNativeDumpRegistry.Empty());
+
     [TestMethod]
     public async Task Returns_Active_Sessions()
     {
@@ -21,7 +24,7 @@ public class ListSessionsToolTests
         var registry = FakeSessionRegistry.WithSession("s1", session1);
         registry.Register("s2", session2);
 
-        var tool = new ListSessionsTool(registry);
+        var tool = CreateTool(registry);
 
         var result = await tool.ExecuteAsync(JsonValue.Create(1), null, CancellationToken.None);
 
@@ -44,7 +47,7 @@ public class ListSessionsToolTests
     public async Task Empty_Registry_Returns_Empty_List()
     {
         var registry = FakeSessionRegistry.Empty();
-        var tool = new ListSessionsTool(registry);
+        var tool = CreateTool(registry);
 
         var result = await tool.ExecuteAsync(JsonValue.Create(1), null, CancellationToken.None);
 
@@ -57,10 +60,52 @@ public class ListSessionsToolTests
     public async Task IsError_Is_False()
     {
         var registry = FakeSessionRegistry.Empty();
-        var tool = new ListSessionsTool(registry);
+        var tool = CreateTool(registry);
 
         var result = await tool.ExecuteAsync(JsonValue.Create(1), null, CancellationToken.None);
 
         result["result"]!["isError"]!.GetValue<bool>().Should().BeFalse();
+    }
+
+    [TestMethod]
+    public async Task DAP_Sessions_Show_Type_Dap()
+    {
+        var session = new FakeSession { State = SessionState.Paused, ActiveThreadId = 1 };
+        var registry = FakeSessionRegistry.WithSession("s1", session);
+        var tool = CreateTool(registry);
+
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), null, CancellationToken.None);
+
+        var json = JsonNode.Parse(GetText(result))!;
+        var sessions = (json["sessions"] as JsonArray)!;
+        sessions[0]!["type"]!.GetValue<string>().Should().Be("dap");
+    }
+
+    [TestMethod]
+    public async Task DAP_DumpSession_Shows_IsDumpSession_True()
+    {
+        var session = new FakeSession { State = SessionState.Paused, IsDumpSession = true };
+        var registry = FakeSessionRegistry.WithSession("dump1", session);
+        var tool = CreateTool(registry);
+
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), null, CancellationToken.None);
+
+        var json = JsonNode.Parse(GetText(result))!;
+        var sessions = (json["sessions"] as JsonArray)!;
+        sessions[0]!["isDumpSession"]!.GetValue<bool>().Should().BeTrue();
+    }
+
+    [TestMethod]
+    public async Task Both_Registries_Empty_Returns_Zero_Count()
+    {
+        var dapRegistry = FakeSessionRegistry.Empty();
+        var dumpRegistry = FakeDotnetDumpRegistry.Empty();
+        var tool = new ListSessionsTool(dapRegistry, dumpRegistry, FakeNativeDumpRegistry.Empty());
+
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), null, CancellationToken.None);
+
+        var json = JsonNode.Parse(GetText(result))!;
+        json["count"]!.GetValue<int>().Should().Be(0);
+        (json["sessions"] as JsonArray).Should().BeEmpty();
     }
 }

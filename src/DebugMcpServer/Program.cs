@@ -1,4 +1,6 @@
 using DebugMcpServer.Dap;
+using DebugMcpServer.DbgEng;
+using DebugMcpServer.DotnetDump;
 using DebugMcpServer.Options;
 using DebugMcpServer.Server;
 using DebugMcpServer.Tools;
@@ -46,6 +48,12 @@ internal static class Program
                     // DAP session registry
                     services.AddSingleton<DapSessionRegistry>();
 
+                    // dotnet-dump session registry
+                    services.AddSingleton<DotnetDumpRegistry>();
+
+                    // Native dump (DbgEng) session registry
+                    services.AddSingleton<NativeDumpRegistry>();
+
                     // Register all MCP tools
                     services.AddSingleton<IMcpTool, ListAdaptersTool>();
                     services.AddSingleton<IMcpTool, ListProcessesTool>();
@@ -78,6 +86,21 @@ internal static class Program
                     services.AddSingleton<IMcpTool, ReadMemoryTool>();
                     services.AddSingleton<IMcpTool, WriteMemoryTool>();
                     services.AddSingleton<IMcpTool, SendDapRequestTool>();
+                    services.AddSingleton<IMcpTool, LoadDumpFileTool>();
+                    services.AddSingleton<IMcpTool, DisassembleTool>();
+                    services.AddSingleton<IMcpTool, GetLoadedSourcesTool>();
+                    services.AddSingleton<IMcpTool, LoadDotnetDumpTool>();
+                    services.AddSingleton<IMcpTool, DotnetDumpThreadsTool>();
+                    services.AddSingleton<IMcpTool, DotnetDumpExceptionsTool>();
+                    services.AddSingleton<IMcpTool, DotnetDumpHeapStatsTool>();
+                    services.AddSingleton<IMcpTool, DotnetDumpInspectTool>();
+                    services.AddSingleton<IMcpTool, DotnetDumpGcRootsTool>();
+                    services.AddSingleton<IMcpTool, DotnetDumpFindObjectsTool>();
+                    services.AddSingleton<IMcpTool, DotnetDumpStackObjectsTool>();
+                    services.AddSingleton<IMcpTool, DotnetDumpMemoryStatsTool>();
+                    services.AddSingleton<IMcpTool, DotnetDumpAsyncStateTool>();
+                    services.AddSingleton<IMcpTool, LoadNativeDumpTool>();
+                    services.AddSingleton<IMcpTool, NativeDumpCommandTool>();
 
                     // MCP hosted service
                     services.AddHostedService<McpHostedService>();

@@ -41,6 +41,8 @@ internal sealed class ContinueExecutionTool : ExecutionToolBase, IMcpTool
             return CreateErrorResponse(id, -32602, err!);
         if (!_registry.TryGet(sessionId, out var session) || session == null)
             return SessionNotFound(id, sessionId);
+        if (session.IsDumpSession)
+            return SessionIsDumpFile(id);
 
         var waitSeconds = Math.Clamp(arguments?["waitSeconds"]?.GetValue<int>() ?? 3, 0, 60);
 

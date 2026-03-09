@@ -154,7 +154,11 @@ internal sealed class LaunchProcessTool : ToolBase, IMcpTool
         }
 
         // Local: fall through to legacy resolution if no adapter resolved yet
-        if (!isRemote && (string.IsNullOrWhiteSpace(resolvedPath) || !File.Exists(resolvedPath)))
+        // Skip File.Exists for bare command names (no directory separator) — they'll be resolved from PATH by Process.Start
+        bool isBareCommand = !string.IsNullOrWhiteSpace(resolvedPath)
+            && !resolvedPath.Contains(Path.DirectorySeparatorChar)
+            && !resolvedPath.Contains(Path.AltDirectorySeparatorChar);
+        if (!isRemote && !isBareCommand && (string.IsNullOrWhiteSpace(resolvedPath) || !File.Exists(resolvedPath)))
         {
             _logger.LogInformation("[Launch] Falling back to legacy adapter resolution");
             resolvedPath = ResolveAdapterPath(resolvedPath);
@@ -243,7 +247,8 @@ internal sealed class LaunchProcessTool : ToolBase, IMcpTool
                 pathFormat = "path",
                 supportsVariableType = true,
                 supportsRunInTerminalRequest = true,
-                supportsProgressReporting = false
+                supportsProgressReporting = false,
+                supportsMemoryReferences = true
             }, timeoutCts.Token);
 
             _logger.LogInformation("[Launch] Step 1/5: 'initialize' complete");

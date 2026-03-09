@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/samples/">
     <Project Path="samples/SampleTarget/SampleTarget.csproj" />
+    <Project Path="samples/CrashTarget/CrashTarget.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/DebugMcpServer/DebugMcpServer.csproj" />

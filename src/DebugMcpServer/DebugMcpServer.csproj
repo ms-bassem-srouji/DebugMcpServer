@@ -32,6 +32,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Diagnostics.Runtime" />
+    <PackageReference Include="Microsoft.Debugging.Platform.DbgEng" />
   </ItemGroup>
 
   <ItemGroup>

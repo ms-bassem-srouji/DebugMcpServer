@@ -36,6 +36,8 @@ internal sealed class PauseExecutionTool : ExecutionToolBase, IMcpTool
             return CreateErrorResponse(id, -32602, err!);
         if (!_registry.TryGet(sessionId, out var session) || session == null)
             return SessionNotFound(id, sessionId);
+        if (session.IsDumpSession)
+            return SessionIsDumpFile(id);
 
         if (session.State == SessionState.Paused)
             return CreateTextResult(id, "{\"outcome\": \"already_paused\", \"message\": \"Process is already paused.\"}");

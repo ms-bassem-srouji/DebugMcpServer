@@ -6,6 +6,7 @@ internal sealed class AdapterConfig
     public string Path { get; set; } = "";
     public string? AdapterID { get; set; } // DAP adapterID (e.g., "coreclr", "python", "node")
     public string? RemotePath { get; set; } // adapter path on remote machines (e.g., "/usr/local/bin/netcoredbg")
+    public string? DumpArgumentName { get; set; } // DAP launch argument for dump file path (e.g., "coreDumpPath", "coreFile", "dumpPath")
 }
 
 internal sealed class DebugOptions
