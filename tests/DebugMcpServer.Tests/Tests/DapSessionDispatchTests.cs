@@ -445,7 +445,7 @@ public class DapSessionDispatchTests
         // Non-existent executable — Process.Start throws, catch block sends error response
         WriteMessage(adapterOutput, """{"type":"request","seq":1,"command":"runInTerminal","arguments":{"args":["__nonexistent_exe_99999__","arg1"],"cwd":"."}}""");
 
-        await Task.Delay(500);
+        await WaitForResponseAsync(adapterInput);
 
         adapterInput.Position = 0;
         var response = await DapSession.ReadDapMessageAsync(adapterInput, CancellationToken.None);
@@ -467,7 +467,7 @@ public class DapSessionDispatchTests
         // Non-existent executable — exercises env var copying before Process.Start throws
         WriteMessage(adapterOutput, """{"type":"request","seq":1,"command":"runInTerminal","arguments":{"args":["__nonexistent_exe_99999__"],"env":{"MY_VAR":"value"}}}""");
 
-        await Task.Delay(500);
+        await WaitForResponseAsync(adapterInput);
 
         adapterInput.Position = 0;
         var response = await DapSession.ReadDapMessageAsync(adapterInput, CancellationToken.None);
@@ -476,5 +476,16 @@ public class DapSessionDispatchTests
         response!["success"]!.GetValue<bool>().Should().BeFalse();
 
         session.Dispose();
+    }
+
+    /// <summary>
+    /// Polls until the stream has data written to it, instead of using a fixed Task.Delay.
+    /// This avoids flaky tests on slow I/O environments (e.g., WSL on /mnt/c).
+    /// </summary>
+    private static async Task WaitForResponseAsync(Stream stream, int timeoutMs = 5000)
+    {
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (stream.Length == 0 && Environment.TickCount64 < deadline)
+            await Task.Delay(50);
     }
 }
