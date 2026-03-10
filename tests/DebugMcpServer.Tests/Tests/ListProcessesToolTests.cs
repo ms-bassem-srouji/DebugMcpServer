@@ -21,6 +21,71 @@ public class ListProcessesToolTests
     private static JsonNode ParseResult(JsonNode result)
         => JsonNode.Parse(result["result"]!["content"]![0]!["text"]!.GetValue<string>())!;
 
+    private static bool IsError(JsonNode result) =>
+        result["result"]!["isError"]!.GetValue<bool>();
+
+    [TestMethod]
+    public void Name_Is_list_processes()
+    {
+        var tool = ToolWith();
+        tool.Name.Should().Be("list_processes");
+    }
+
+    [TestMethod]
+    public void Description_Is_Not_Empty()
+    {
+        var tool = ToolWith();
+        tool.Description.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [TestMethod]
+    public void Description_Mentions_SSH()
+    {
+        var tool = ToolWith();
+        tool.Description.Should().Contain("SSH");
+    }
+
+    [TestMethod]
+    public void InputSchema_Has_Filter_Property()
+    {
+        var tool = ToolWith();
+        var props = tool.GetInputSchema()["properties"] as JsonObject;
+        props!.ContainsKey("filter").Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void InputSchema_Has_Host_Property()
+    {
+        var tool = ToolWith();
+        var props = tool.GetInputSchema()["properties"] as JsonObject;
+        props!.ContainsKey("host").Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void InputSchema_Has_SshPort_Property()
+    {
+        var tool = ToolWith();
+        var props = tool.GetInputSchema()["properties"] as JsonObject;
+        props!.ContainsKey("sshPort").Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void InputSchema_Has_SshKey_Property()
+    {
+        var tool = ToolWith();
+        var props = tool.GetInputSchema()["properties"] as JsonObject;
+        props!.ContainsKey("sshKey").Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void InputSchema_Required_Is_Empty()
+    {
+        var tool = ToolWith();
+        var required = tool.GetInputSchema()["required"] as JsonArray;
+        required.Should().NotBeNull();
+        required!.Should().BeEmpty();
+    }
+
     [TestMethod]
     public async Task Returns_Pid_And_Name_For_Each_Process()
     {
@@ -102,5 +167,124 @@ public class ListProcessesToolTests
         var result = await tool.ExecuteAsync(JsonValue.Create(1), null, CancellationToken.None);
 
         result["result"]!["isError"]!.GetValue<bool>().Should().BeFalse();
+    }
+
+    [TestMethod]
+    public async Task Empty_Arguments_Uses_No_Filter()
+    {
+        var tool = ToolWith(CurrentProcess);
+        var args = JsonNode.Parse("""{}""");
+
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None);
+
+        var json = ParseResult(result);
+        json["count"]!.GetValue<int>().Should().Be(1);
+    }
+
+    [TestMethod]
+    public async Task Filter_With_Empty_String_Does_Not_Filter()
+    {
+        // Empty string filter behaves as "contains empty string" which matches everything
+        var tool = ToolWith(CurrentProcess);
+        var args = JsonNode.Parse("""{"filter":""}""");
+
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None);
+
+        var json = ParseResult(result);
+        json["count"]!.GetValue<int>().Should().Be(1);
+    }
+
+    [TestMethod]
+    public async Task Filter_Partial_Name_Match()
+    {
+        var tool = ToolWith(CurrentProcess);
+        // Use first character of the process name — should match
+        var firstChar = CurrentProcess.ProcessName[0].ToString();
+        var args = JsonNode.Parse($$"""{"filter":"{{firstChar}}"}""");
+
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None);
+
+        var json = ParseResult(result);
+        json["count"]!.GetValue<int>().Should().BeGreaterThanOrEqualTo(1);
+    }
+
+    [TestMethod]
+    public async Task Multiple_Processes_Sorted_By_Name()
+    {
+        // Same process used multiple times — should all appear with same name
+        var tool = ToolWith(CurrentProcess, CurrentProcess);
+
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), null, CancellationToken.None);
+
+        var json = ParseResult(result);
+        var processes = (json["processes"] as JsonArray)!;
+        processes.Should().HaveCount(2);
+        // Both should have same name since it's the same process
+        processes[0]!["name"]!.GetValue<string>().Should().Be(processes[1]!["name"]!.GetValue<string>());
+    }
+
+    [TestMethod]
+    public async Task Null_Filter_Returns_All()
+    {
+        var tool = ToolWith(CurrentProcess);
+        // Explicitly set filter to null by omitting it
+        var args = JsonNode.Parse("""{}""");
+
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None);
+
+        IsError(result).Should().BeFalse();
+        var json = ParseResult(result);
+        json["count"]!.GetValue<int>().Should().Be(1);
+    }
+
+    [TestMethod]
+    public async Task Result_Contains_Processes_Key()
+    {
+        var tool = ToolWith();
+
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), null, CancellationToken.None);
+
+        var json = ParseResult(result);
+        json["processes"].Should().NotBeNull();
+        json["count"].Should().NotBeNull();
+    }
+
+    [TestMethod]
+    public async Task Remote_Host_With_Invalid_SSH_Returns_Error()
+    {
+        // Providing a host triggers the SSH path — since SSH won't be available
+        // in test, we expect an error
+        var tool = ToolWith();
+        var args = JsonNode.Parse("""{"host":"nonexistent-host-zzz"}""");
+
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None);
+
+        IsError(result).Should().BeTrue();
+    }
+
+    [TestMethod]
+    public async Task Default_Constructor_Uses_Real_Process_List()
+    {
+        // Use the public constructor (no factory injection)
+        var tool = new ListProcessesTool(NullLogger<ListProcessesTool>.Instance);
+
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), null, CancellationToken.None);
+
+        IsError(result).Should().BeFalse();
+        var json = ParseResult(result);
+        json["count"]!.GetValue<int>().Should().BeGreaterThan(0);
+    }
+
+    [TestMethod]
+    public async Task Default_Constructor_Filter_By_Current_Process()
+    {
+        var tool = new ListProcessesTool(NullLogger<ListProcessesTool>.Instance);
+        var args = JsonNode.Parse($$"""{"filter":"{{CurrentProcess.ProcessName}}"}""");
+
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None);
+
+        IsError(result).Should().BeFalse();
+        var json = ParseResult(result);
+        json["count"]!.GetValue<int>().Should().BeGreaterThanOrEqualTo(1);
     }
 }

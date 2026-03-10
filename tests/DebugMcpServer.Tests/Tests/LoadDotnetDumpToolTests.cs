@@ -94,4 +94,51 @@ public class LoadDotnetDumpToolTests
         desc.Should().Contain("ClrMD");
         desc.Should().Contain("dotnet_dump_threads");
     }
+
+    [TestMethod]
+    public async Task Invalid_File_Content_Returns_Error()
+    {
+        // Create a temp file that is NOT a valid dump
+        var tempFile = Path.Combine(Path.GetTempPath(), $"bad_dump_{Guid.NewGuid():N}.dmp");
+        try
+        {
+            File.WriteAllText(tempFile, "this is not a dump file");
+            var tool = CreateTool();
+            var args = JsonNode.Parse($$"""{"dumpPath": "{{tempFile.Replace("\\", "\\\\")}}"}""");
+
+            var result = await tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None);
+
+            IsError(result).Should().BeTrue();
+        }
+        finally
+        {
+            // ClrMD may hold the file open briefly; ignore cleanup failures
+            try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
+        }
+    }
+
+    [TestMethod]
+    public async Task Empty_DumpPath_Returns_Error()
+    {
+        var tool = CreateTool();
+        var args = JsonNode.Parse("""{"dumpPath": ""}""");
+
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None);
+
+        result["error"].Should().NotBeNull();
+    }
+
+    [TestMethod]
+    public void Description_Mentions_No_External_Tools()
+    {
+        var desc = CreateTool().Description;
+        desc.Should().Contain("No external tools");
+    }
+
+    [TestMethod]
+    public void Description_Mentions_MIT()
+    {
+        var desc = CreateTool().Description;
+        desc.Should().Contain("MIT");
+    }
 }

@@ -15,6 +15,7 @@ namespace DebugMcpServer.Tests.Tests;
 /// </summary>
 [TestClass]
 [TestCategory("WindowsOnly")]
+[DoNotParallelize]
 public class DbgEngFullIntegrationTests
 {
     private static string? _dumpPath;
@@ -65,6 +66,11 @@ public class DbgEngFullIntegrationTests
         }
 
         _session = DbgEngSession.Open(_dumpPath, NullLogger.Instance);
+
+        // Set symbol path once so all tests can resolve symbols regardless of execution order
+        var symPath = Path.Combine(repoRoot, "samples", "NativeCrashTarget", "build", "Debug");
+        _session.ExecuteCommand($".sympath+ {symPath}");
+        _session.ExecuteCommand(".reload /f");
     }
 
     [ClassCleanup]
@@ -102,13 +108,8 @@ public class DbgEngFullIntegrationTests
     public void Can_Find_Global_Variables()
     {
         EnsureSession();
-        // Set symbol path to find PDB
-        var repoRoot = FindRepoRoot();
-        var symPath = Path.Combine(repoRoot, "samples", "NativeCrashTarget", "build", "Debug");
-        _session!.ExecuteCommand($".sympath+ {symPath}");
-        _session.ExecuteCommand(".reload /f");
-
-        var output = _session.ExecuteCommand("x NativeCrashTarget!g_*");
+        // Symbol path already set in ClassInitialize
+        var output = _session!.ExecuteCommand("x NativeCrashTarget!g_*");
         output.Should().Contain("g_orderCount");
         output.Should().Contain("g_totalRevenue");
         output.Should().Contain("g_seed");
@@ -174,22 +175,34 @@ public class DbgEngFullIntegrationTests
         if (_dumpPath == null || !File.Exists(_dumpPath))
         { Assert.Inconclusive("No dump file"); return; }
 
-        // Test the full tool with its own session
-        var registry = new NativeDumpRegistry(NullLogger<NativeDumpRegistry>.Instance);
-        var tool = new LoadNativeDumpTool(registry, NullLogger<LoadNativeDumpTool>.Instance);
+        // Dispose shared session first — DbgEng COM does not support
+        // multiple clients in the same process reliably.
+        _session?.Dispose();
+        _session = null;
 
-        var args = new JsonObject { ["dumpPath"] = _dumpPath };
-        var result = tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None).Result;
+        try
+        {
+            var registry = new NativeDumpRegistry(NullLogger<NativeDumpRegistry>.Instance);
+            var tool = new LoadNativeDumpTool(registry, NullLogger<LoadNativeDumpTool>.Instance);
 
-        var text = result["result"]!["content"]![0]!["text"]!.GetValue<string>();
-        var json = JsonNode.Parse(text)!;
-        json["status"]!.GetValue<string>().Should().Be("ready");
-        json["sessionId"].Should().NotBeNull();
+            var args = new JsonObject { ["dumpPath"] = _dumpPath };
+            var result = tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None).Result;
 
-        // Cleanup: detach the session
-        var sessionId = json["sessionId"]!.GetValue<string>();
-        registry.TryRemove(sessionId, out var session);
-        session?.Dispose();
+            var text = result["result"]!["content"]![0]!["text"]!.GetValue<string>();
+            var json = JsonNode.Parse(text)!;
+            json["status"]!.GetValue<string>().Should().Be("ready");
+            json["sessionId"].Should().NotBeNull();
+
+            // Cleanup: detach the session
+            var sessionId = json["sessionId"]!.GetValue<string>();
+            registry.TryRemove(sessionId, out var session);
+            session?.Dispose();
+        }
+        finally
+        {
+            // Reopen shared session for subsequent tests
+            ReopenSession();
+        }
     }
 
     [TestMethod]
@@ -199,28 +212,40 @@ public class DbgEngFullIntegrationTests
         if (_dumpPath == null || !File.Exists(_dumpPath))
         { Assert.Inconclusive("No dump file"); return; }
 
-        // Create a fresh session for this test (DbgEng sessions have thread affinity)
-        var registry = new NativeDumpRegistry(NullLogger<NativeDumpRegistry>.Instance);
-        var loadTool = new LoadNativeDumpTool(registry, NullLogger<LoadNativeDumpTool>.Instance);
-        var loadResult = loadTool.ExecuteAsync(JsonValue.Create(1),
-            new JsonObject { ["dumpPath"] = _dumpPath }, CancellationToken.None).Result;
-        var loadJson = JsonNode.Parse(loadResult["result"]!["content"]![0]!["text"]!.GetValue<string>())!;
-        var sessionId = loadJson["sessionId"]!.GetValue<string>();
+        // Dispose shared session first — DbgEng COM does not support
+        // multiple clients in the same process reliably.
+        _session?.Dispose();
+        _session = null;
 
         try
         {
-            var tool = new NativeDumpCommandTool(registry, NullLogger<NativeDumpCommandTool>.Instance);
-            var args = new JsonObject { ["sessionId"] = sessionId, ["command"] = "lm" };
-            var result = tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None).Result;
+            var registry = new NativeDumpRegistry(NullLogger<NativeDumpRegistry>.Instance);
+            var loadTool = new LoadNativeDumpTool(registry, NullLogger<LoadNativeDumpTool>.Instance);
+            var loadResult = loadTool.ExecuteAsync(JsonValue.Create(1),
+                new JsonObject { ["dumpPath"] = _dumpPath }, CancellationToken.None).Result;
+            var loadJson = JsonNode.Parse(loadResult["result"]!["content"]![0]!["text"]!.GetValue<string>())!;
+            var sessionId = loadJson["sessionId"]!.GetValue<string>();
 
-            var text = result["result"]!["content"]![0]!["text"]!.GetValue<string>();
-            var json = JsonNode.Parse(text)!;
-            json["output"]!.GetValue<string>().Should().Contain("NativeCrashTarget");
+            try
+            {
+                var tool = new NativeDumpCommandTool(registry, NullLogger<NativeDumpCommandTool>.Instance);
+                var args = new JsonObject { ["sessionId"] = sessionId, ["command"] = "lm" };
+                var result = tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None).Result;
+
+                var text = result["result"]!["content"]![0]!["text"]!.GetValue<string>();
+                var json = JsonNode.Parse(text)!;
+                json["output"]!.GetValue<string>().Should().Contain("NativeCrashTarget");
+            }
+            finally
+            {
+                if (registry.TryRemove(sessionId, out var session))
+                    session?.Dispose();
+            }
         }
         finally
         {
-            if (registry.TryRemove(sessionId, out var session))
-                session?.Dispose();
+            // Reopen shared session for subsequent tests
+            ReopenSession();
         }
     }
 
@@ -230,6 +255,18 @@ public class DbgEngFullIntegrationTests
     {
         if (!OperatingSystem.IsWindows() || _session == null)
             Assert.Inconclusive("Windows-only or no dump generated.");
+    }
+
+    private static void ReopenSession()
+    {
+        if (_dumpPath == null || !File.Exists(_dumpPath)) return;
+
+        _session = DbgEngSession.Open(_dumpPath, NullLogger.Instance);
+
+        var repoRoot = FindRepoRoot();
+        var symPath = Path.Combine(repoRoot, "samples", "NativeCrashTarget", "build", "Debug");
+        _session.ExecuteCommand($".sympath+ {symPath}");
+        _session.ExecuteCommand(".reload /f");
     }
 
     private static string FindRepoRoot()
