@@ -94,8 +94,6 @@ public class RemoveBreakpointToolTests
         var required = tool.GetInputSchema()["required"] as JsonArray;
         var names = required!.Select(r => r!.GetValue<string>()).ToList();
         names.Should().Contain("sessionId");
-        names.Should().Contain("file");
-        names.Should().Contain("line");
     }
 
     [TestMethod]
@@ -106,6 +104,8 @@ public class RemoveBreakpointToolTests
         props!.ContainsKey("sessionId").Should().BeTrue();
         props.ContainsKey("file").Should().BeTrue();
         props.ContainsKey("line").Should().BeTrue();
+        props.ContainsKey("all").Should().BeTrue();
+        props.ContainsKey("allFunctions").Should().BeTrue();
     }
 
     [TestMethod]
@@ -119,7 +119,7 @@ public class RemoveBreakpointToolTests
     }
 
     [TestMethod]
-    public async Task Missing_File_Returns_Error()
+    public async Task Missing_File_And_No_Flags_Returns_Error()
     {
         var (tool, _) = CreateTool();
         var args = JsonNode.Parse("""{"sessionId":"sess1","line":42}""");
@@ -129,13 +129,21 @@ public class RemoveBreakpointToolTests
     }
 
     [TestMethod]
-    public async Task Missing_Line_Returns_Error()
+    public async Task File_Without_Line_Removes_All_In_File()
     {
-        var (tool, _) = CreateTool();
-        var args = JsonNode.Parse("""{"sessionId":"sess1","file":"C:\\app\\Program.cs"}""");
+        var (tool, session) = CreateTool();
+        session.Breakpoints[@"C:\app\Program.cs"] = new List<SourceBreakpoint>
+        {
+            new(@"C:\app\Program.cs", 10),
+            new(@"C:\app\Program.cs", 20)
+        };
 
+        var args = JsonNode.Parse("""{"sessionId":"sess1","file":"C:\\app\\Program.cs"}""");
         var result = await tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None);
-        result["error"].Should().NotBeNull();
+
+        IsError(result).Should().BeFalse();
+        session.Breakpoints[@"C:\app\Program.cs"].Should().BeEmpty();
+        session.SentRequests.Should().Contain(r => r.Command == "setBreakpoints");
     }
 
     [TestMethod]
@@ -208,5 +216,97 @@ public class RemoveBreakpointToolTests
         await tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None);
 
         session.Breakpoints[@"C:\app\Program.cs"].Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public async Task All_True_Removes_All_Source_Breakpoints_Across_Files()
+    {
+        var (tool, session) = CreateTool();
+        session.Breakpoints[@"C:\app\Program.cs"] = new List<SourceBreakpoint>
+        {
+            new(@"C:\app\Program.cs", 10),
+            new(@"C:\app\Program.cs", 20)
+        };
+        session.Breakpoints[@"C:\app\Other.cs"] = new List<SourceBreakpoint>
+        {
+            new(@"C:\app\Other.cs", 5)
+        };
+
+        var args = JsonNode.Parse("""{"sessionId":"sess1","all":true}""");
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None);
+
+        IsError(result).Should().BeFalse();
+        GetText(result).Should().Contain("Removed all source breakpoints");
+        session.Breakpoints.Should().BeEmpty();
+        session.SentRequests.Where(r => r.Command == "setBreakpoints").Should().HaveCount(2);
+    }
+
+    [TestMethod]
+    public async Task All_True_With_No_Breakpoints_Returns_Success()
+    {
+        var (tool, session) = CreateTool();
+
+        var args = JsonNode.Parse("""{"sessionId":"sess1","all":true}""");
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None);
+
+        IsError(result).Should().BeFalse();
+        GetText(result).Should().Contain("0 file(s)");
+    }
+
+    [TestMethod]
+    public async Task AllFunctions_True_Sends_Empty_SetFunctionBreakpoints()
+    {
+        var (tool, session) = CreateTool();
+        session.SetupRequest("setFunctionBreakpoints", JsonNode.Parse("""{"breakpoints":[]}""")!);
+
+        var args = JsonNode.Parse("""{"sessionId":"sess1","allFunctions":true}""");
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None);
+
+        IsError(result).Should().BeFalse();
+        GetText(result).Should().Contain("Cleared all function breakpoints");
+        session.SentRequests.Should().Contain(r => r.Command == "setFunctionBreakpoints");
+    }
+
+    [TestMethod]
+    public async Task AllFunctions_DapError_Returns_Error()
+    {
+        var (tool, session) = CreateTool();
+        session.SetupRequestError("setFunctionBreakpoints", "unsupported");
+
+        var args = JsonNode.Parse("""{"sessionId":"sess1","allFunctions":true}""");
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None);
+
+        IsError(result).Should().BeTrue();
+        GetText(result).Should().Contain("DAP error");
+    }
+
+    [TestMethod]
+    public async Task Remove_All_In_File_Does_Not_Affect_Other_Files()
+    {
+        var (tool, session) = CreateTool();
+        session.Breakpoints[@"C:\app\Program.cs"] = new List<SourceBreakpoint>
+        {
+            new(@"C:\app\Program.cs", 10)
+        };
+        session.Breakpoints[@"C:\app\Other.cs"] = new List<SourceBreakpoint>
+        {
+            new(@"C:\app\Other.cs", 5)
+        };
+
+        var args = JsonNode.Parse("""{"sessionId":"sess1","file":"C:\\app\\Program.cs"}""");
+        await tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None);
+
+        session.Breakpoints[@"C:\app\Program.cs"].Should().BeEmpty();
+        session.Breakpoints[@"C:\app\Other.cs"].Should().HaveCount(1);
+    }
+
+    [TestMethod]
+    public async Task No_File_No_Flags_Returns_Error_With_Guidance()
+    {
+        var (tool, _) = CreateTool();
+        var args = JsonNode.Parse("""{"sessionId":"sess1"}""");
+
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None);
+        result["error"].Should().NotBeNull();
     }
 }
