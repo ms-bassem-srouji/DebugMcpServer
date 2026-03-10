@@ -108,4 +108,87 @@ public class ListSessionsToolTests
         json["count"]!.GetValue<int>().Should().Be(0);
         (json["sessions"] as JsonArray).Should().BeEmpty();
     }
+
+    [TestMethod]
+    public void Name_Is_list_sessions()
+    {
+        var tool = CreateTool(FakeSessionRegistry.Empty());
+        tool.Name.Should().Be("list_sessions");
+    }
+
+    [TestMethod]
+    public void Description_Mentions_All_Session_Types()
+    {
+        var tool = CreateTool(FakeSessionRegistry.Empty());
+        tool.Description.Should().Contain("DAP");
+        tool.Description.Should().Contain("dotnet-dump");
+        tool.Description.Should().Contain("native dump");
+    }
+
+    [TestMethod]
+    public void InputSchema_Has_No_Required_Fields()
+    {
+        var tool = CreateTool(FakeSessionRegistry.Empty());
+        var required = tool.GetInputSchema()["required"] as JsonArray;
+        required.Should().NotBeNull();
+        required!.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public async Task Running_Session_Shows_Running_State()
+    {
+        var session = new FakeSession { State = SessionState.Running };
+        var registry = FakeSessionRegistry.WithSession("r1", session);
+        var tool = CreateTool(registry);
+
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), null, CancellationToken.None);
+
+        var json = JsonNode.Parse(GetText(result))!;
+        var sessions = (json["sessions"] as JsonArray)!;
+        sessions[0]!["state"]!.GetValue<string>().Should().Be("Running");
+    }
+
+    [TestMethod]
+    public async Task Non_DumpSession_Shows_IsDumpSession_False()
+    {
+        var session = new FakeSession { State = SessionState.Paused, IsDumpSession = false };
+        var registry = FakeSessionRegistry.WithSession("live1", session);
+        var tool = CreateTool(registry);
+
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), null, CancellationToken.None);
+
+        var json = JsonNode.Parse(GetText(result))!;
+        var sessions = (json["sessions"] as JsonArray)!;
+        sessions[0]!["isDumpSession"]!.GetValue<bool>().Should().BeFalse();
+    }
+
+    [TestMethod]
+    public async Task Null_ActiveThread_Serializes_Without_Error()
+    {
+        var session = new FakeSession { State = SessionState.Paused, ActiveThreadId = null };
+        var registry = FakeSessionRegistry.WithSession("s1", session);
+        var tool = CreateTool(registry);
+
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), null, CancellationToken.None);
+
+        // The tool should still return successfully when ActiveThreadId is null
+        result["result"]!["isError"]!.GetValue<bool>().Should().BeFalse();
+        var json = JsonNode.Parse(GetText(result))!;
+        var sessions = (json["sessions"] as JsonArray)!;
+        sessions.Should().HaveCount(1);
+        sessions[0]!["sessionId"]!.GetValue<string>().Should().Be("s1");
+    }
+
+    [TestMethod]
+    public async Task Arguments_Are_Ignored()
+    {
+        var registry = FakeSessionRegistry.Empty();
+        var tool = CreateTool(registry);
+
+        // Pass arbitrary arguments — tool should ignore them
+        var args = JsonNode.Parse("""{"randomKey": "randomValue"}""");
+        var result = await tool.ExecuteAsync(JsonValue.Create(1), args, CancellationToken.None);
+
+        result["result"]!["isError"]!.GetValue<bool>().Should().BeFalse();
+    }
 }

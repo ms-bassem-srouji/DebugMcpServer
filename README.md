@@ -1,6 +1,6 @@
 [![CI](https://github.com/ms-bassem-srouji/DebugMcpServer/actions/workflows/ci.yml/badge.svg)](https://github.com/ms-bassem-srouji/DebugMcpServer/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/DebugMcpServer.svg)](https://www.nuget.org/packages/DebugMcpServer)
-[![Tests](https://img.shields.io/badge/tests-257%2B%20passed-brightgreen)](https://github.com/ms-bassem-srouji/DebugMcpServer/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-500%2B%20passed-brightgreen)](https://github.com/ms-bassem-srouji/DebugMcpServer/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ms-bassem-srouji/a158c95708696822a98f735f35d18eae/raw/coverage.json)](https://github.com/ms-bassem-srouji/DebugMcpServer/actions/workflows/ci.yml)
 [![Platform](https://img.shields.io/badge/platform-windows%20%7C%20linux%20%7C%20macOS-blue)](https://github.com/ms-bassem-srouji/DebugMcpServer)
 
@@ -8,13 +8,15 @@
 
 A Model Context Protocol (MCP) server that provides interactive debugging capabilities for AI assistants using the [Debug Adapter Protocol (DAP)](https://microsoft.github.io/debug-adapter-protocol/).
 
-Attach to running processes, set breakpoints, step through code, inspect variables, evaluate expressions — all through MCP tool calls. Supports multiple debug adapters (.NET, Python, Node.js, C++), parallel debug sessions, and remote debugging over SSH.
+Attach to running processes, set breakpoints, step through code, inspect variables, evaluate expressions — all through MCP tool calls. Supports multiple debug adapters (.NET, Python, Node.js, C++), parallel debug sessions, remote debugging over SSH, and comprehensive dump file analysis (.NET via ClrMD, native Windows via DbgEng/WinDbg, cross-platform via DAP adapters).
 
 ## Features
 
 - **Multi-adapter support** — Configure multiple debug adapters (netcoredbg, debugpy, js-debug, cpptools) and select which one to use per session
 - **Full debugging workflow** — Attach/launch, breakpoints (line, conditional, function, exception, data), stepping, variable inspection, expression evaluation
-- **Dump file debugging** — Load crash dumps and core dumps for post-mortem analysis with stack traces, variable inspection, memory reads, and disassembly
+- **Dump file debugging** — Load crash dumps and core dumps for post-mortem analysis via DAP adapters with stack traces, variable inspection, memory reads, and disassembly
+- **.NET dump analysis (ClrMD)** — Built-in .NET dump analysis with no external tools required. Thread enumeration, exception chains, heap statistics, object inspection, GC root analysis, memory stats, and async state machine diagnostics. Cross-platform, MIT-licensed.
+- **Native dump analysis (DbgEng)** — Windows-only native `.dmp` analysis using the WinDbg engine (dbgeng.dll). Run any WinDbg command (`!analyze -v`, `k`, `~*k`, `dv`, `lm`, etc.) with zero external tools required.
 - **Parallel sessions** — Debug multiple processes simultaneously with concurrent request processing
 - **Remote debugging** — Debug processes on remote machines via SSH with zero additional setup
 - **Memory access** — Read and write raw memory at arbitrary addresses
@@ -484,6 +486,26 @@ These are natural language prompts you can give to your AI assistant. The assist
 >
 > **You:** "I think we have an async deadlock — show me all tasks that are WaitingForActivation"
 
+### Native Dump Analysis (Windows)
+
+> **You:** "Load the native crash dump at C:\dumps\app.dmp"
+>
+> **You:** "Run !analyze -v to get the crash analysis"
+>
+> **You:** "Show me the stack traces for all threads"
+>
+> **You:** "What are the local variables at the crash frame?"
+>
+> **You:** "List all loaded modules"
+>
+> **You:** "Show me the registers"
+>
+> **You:** "Disassemble the function at the crash address"
+>
+> **You:** "Display the memory at address 0x7FFE4A3B1000"
+>
+> **You:** "Show me the type layout for MyStruct"
+
 ### Advanced Workflows
 
 > **You:** "Attach to the MyApp process, set a breakpoint when `orderTotal > 1000` on line 55 of CheckoutService.cs, then resume and wait for it to hit"
@@ -544,6 +566,7 @@ Supported adapters and dump formats:
 | cpptools (OpenDebugAD7) | `cpp` | Linux core dumps | VS Code Extension |
 | lldb-dap | `lldb` | Core dumps, Mach-O cores | Open source |
 | **ClrMD** (built-in) | *(no config)* | **.NET dumps on any platform** | **MIT** |
+| **DbgEng** (built-in) | *(no config)* | **Windows native `.dmp` files** | **Built into Windows** |
 
 #### Platform guidance for dump debugging
 
@@ -552,11 +575,9 @@ Supported adapters and dump formats:
 | **.NET dump** | Any | `load_dotnet_dump` — ClrMD built-in, no config needed (threads, exceptions, heap, GC roots) |
 | **.NET core dump** | Linux/macOS | `load_dump_file` with `dotnet` adapter — full DAP debugging (variables, expressions) |
 | **Native C/C++ core dump** | Linux/macOS | `load_dump_file` with `cpp` or `lldb` adapter — DAP debugging |
-| **Native C/C++ `.dmp`** | Windows | **Not supported** — see note below |
+| **Native C/C++ `.dmp`** | Windows | `load_native_dump` — DbgEng built-in, full WinDbg command support |
 
-> **Why two approaches?** DAP debugging (via `load_dump_file`) gives structured variable inspection, source mapping, and expression evaluation — but needs a compatible debug adapter. ClrMD (via `load_dotnet_dump`) provides .NET-specific deep analysis (heap stats, GC roots, exception chains) directly as a built-in library — no external tools or configuration needed.
-
-> **Windows native `.dmp` files are not supported.** Microsoft's vsdbg/cppvsdbg adapter can open Windows `.dmp` files but has a restrictive license (Visual Studio/VS Code use only) and uses a non-standard DAP protocol flow that is not compatible with this MCP server. For Windows native dump analysis, use WinDbg or Visual Studio directly. For .NET dumps on Windows, `load_dotnet_dump` (ClrMD) works fully.
+> **Why three approaches?** DAP debugging (via `load_dump_file`) gives structured variable inspection, source mapping, and expression evaluation — but needs a compatible debug adapter. ClrMD (via `load_dotnet_dump`) provides .NET-specific deep analysis (heap stats, GC roots, exception chains) directly as a built-in library — no external tools or configuration needed. DbgEng (via `load_native_dump`) gives full WinDbg command-line access for native Windows dump analysis — also built-in with zero configuration.
 
 Execution control tools (`continue`, `step_*`, `pause`) are automatically blocked on dump sessions with a clear error message.
 
@@ -581,7 +602,25 @@ For .NET dumps, use the built-in ClrMD integration (MIT-licensed, no external to
 
 Powered by [Microsoft.Diagnostics.Runtime (ClrMD)](https://github.com/microsoft/clrmd) — the same library that `dotnet-dump` and Visual Studio use internally. No external tools to install.
 
-Requires SSH key-based authentication (password auth is not supported since the MCP server runs non-interactively).
+### Native Dump Analysis (DbgEng — Windows)
+
+For native Windows `.dmp` files, use the built-in DbgEng integration (uses dbgeng.dll shipped with Windows — no external tools required):
+
+```
+1. load_native_dump(dumpPath: "app_crash.dmp")
+   → sessionId + thread count, engine version, common commands reference
+2. native_dump_command(command: "!analyze -v")    → automated crash analysis
+3. native_dump_command(command: "~*k")            → stack traces for all threads
+4. native_dump_command(command: "~3s")            → switch to thread 3
+5. native_dump_command(command: "dv")             → display local variables
+6. native_dump_command(command: "r")              → show registers
+7. native_dump_command(command: "lm")             → list loaded modules
+8. native_dump_command(command: "u @rip L20")     → disassemble at crash location
+9. native_dump_command(command: "dt MyStruct @rbp-0x40")  → display type layout
+10. detach_session()                               → close session
+```
+
+Powered by dbgeng.dll — the same engine that WinDbg uses. Any WinDbg command works: `k`, `~*k`, `dv`, `r`, `lm`, `u`, `dd`, `db`, `dt`, `!analyze`, `!heap`, `!locks`, etc.
 
 ### Parallel Sessions
 
@@ -604,7 +643,7 @@ MCP Client (Claude, etc.)
 │  McpHostedService             │  ← Concurrent request dispatch
 │  (MCP protocol handler)       │     with stdout write lock
 ├───────────────────────────────┤
-│  Tools (31 total)             │  ← Each tool = one MCP capability
+│  Tools (46 total)             │  ← Each tool = one MCP capability
 │  AttachToProcessTool          │
 │  SetBreakpointTool            │
 │  GetVariablesTool  ...        │
@@ -617,6 +656,14 @@ MCP Client (Claude, etc.)
 ├───────────────────────────────┤
 │  Debug Adapter (netcoredbg)   │  ← Local process or remote via SSH
 │  Debug Adapter (debugpy)      │
+└───────────────────────────────┘
+
+┌───────────────────────────────┐
+│  DotnetDumpRegistry           │  ← .NET dump sessions (ClrMD)
+│  DotnetDumpSession            │     In-process, no external tools
+├───────────────────────────────┤
+│  NativeDumpRegistry           │  ← Native dump sessions (DbgEng)
+│  DbgEngSession                │     Windows only, WinDbg engine
 └───────────────────────────────┘
 ```
 
@@ -693,7 +740,7 @@ User-level overrides (`~/.config/debug-mcp-server/appsettings.json`) can use ful
 dotnet test
 ```
 
-The test suite includes 257+ deterministic unit tests with no external dependencies (no sleeps, no reflection, no network calls).
+The test suite includes 500+ tests: deterministic unit tests (no sleeps, no reflection, no network calls), ClrMD integration tests (generate real .NET dumps), and DbgEng integration tests (generate real native dumps on Windows).
 
 ## Project Structure
 
@@ -701,12 +748,14 @@ The test suite includes 257+ deterministic unit tests with no external dependenc
 DebugMcpServer/
 ├── src/DebugMcpServer/
 │   ├── Dap/                  # DAP protocol: session, events, SSH helper, error mapping
+│   ├── DbgEng/              # Windows native dump analysis (dbgeng.dll/WinDbg engine)
+│   ├── DotnetDump/          # .NET dump analysis (ClrMD / Microsoft.Diagnostics.Runtime)
 │   ├── Options/              # Configuration models (adapters, timeouts)
 │   ├── Server/               # MCP hosted service (stdio transport, concurrent dispatch)
-│   └── Tools/                # All 29 MCP tools
+│   └── Tools/                # All 46 MCP tools
 ├── tests/DebugMcpServer.Tests/
 │   ├── Fakes/                # FakeSession, FakeSessionRegistry
-│   └── Tests/                # Unit tests for every tool
+│   └── Tests/                # 500+ unit & integration tests
 └── samples/
     ├── SampleTarget/          # Sample .NET app for live debugging
     ├── CrashTarget/           # .NET app that generates a self-dump for testing

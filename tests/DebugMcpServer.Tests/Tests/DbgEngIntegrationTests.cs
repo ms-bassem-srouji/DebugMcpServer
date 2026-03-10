@@ -7,6 +7,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace DebugMcpServer.Tests.Tests;
 
 [TestClass]
+[DoNotParallelize]
 public class DbgEngIntegrationTests
 {
     private static string? FindDumpFile()
