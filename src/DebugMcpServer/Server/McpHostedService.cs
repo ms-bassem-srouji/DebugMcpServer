@@ -204,9 +204,16 @@ internal sealed class McpHostedService : IHostedService
         7. **Modify state**: `set_variable` changes a variable's value while paused.
         8. **Detach**: Call `detach_session` to disconnect. The target process continues running.
 
+        ### .NET Debugging
+
+        - **Launch .NET apps**: Pass the `.dll` path directly as `program` (e.g., `bin/Debug/net8.0/MyApp.dll`). Do NOT use `dotnet` as the program with the DLL as args — netcoredbg expects the DLL directly.
+        - **Debug .NET unit tests**: Use `launch_process` with the test DLL path as `program` (e.g., `bin/Debug/net8.0/MyTests.dll`). The test framework entry point in the DLL will execute all tests. To run specific tests, the DLL must be launched by the test runner — see the `attach_to_process` workflow below.
+        - **Debug specific tests via attach**: Set env var `VSTEST_HOST_DEBUG=1`, run `dotnet test --filter "TestName"`. The test runner prints `Process Id: <PID>`. Use `attach_to_process` with that PID. **Important**: set breakpoints AFTER attaching and BEFORE calling `continue_execution` — breakpoints set during attach resolve only after assemblies are loaded. If breakpoints show as `verified: false`, call `continue_execution` once to let the runtime load assemblies, then re-set the breakpoints.
+        - **Breakpoints not verified?**: This means the debug adapter hasn't loaded the assembly containing that source file yet. Common causes: (1) setting breakpoints before `continue_execution` when using `attach_to_process`, (2) the PDB source paths don't match the local file paths. Verify PDB paths match your local source tree.
+
         ### Important Notes
 
-        - **Launch vs Attach**: `launch_process` starts a new process under the debugger. `attach_to_process` connects to an existing process.
+        - **Launch vs Attach**: Prefer `launch_process` over `attach_to_process` when possible — breakpoints are more reliable because the debugger controls module loading from the start. Use `attach_to_process` only when you need to debug a process you can't launch directly (e.g., a service, or a test host spawned by `dotnet test`).
         - **Multiple adapters**: Use `list_adapters` to see configured adapters, pass `adapter: "<name>"` to select one.
         - **Multiple sessions**: Use `list_sessions` to see all active debug sessions. Requests are processed concurrently — you can debug multiple processes in parallel.
         - **Breakpoint types**: Line breakpoints (`set_breakpoint`), function breakpoints (`set_function_breakpoints`), exception breakpoints (`set_exception_breakpoints`), and data/watch breakpoints (`set_data_breakpoint`).

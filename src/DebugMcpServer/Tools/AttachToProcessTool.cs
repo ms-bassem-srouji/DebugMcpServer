@@ -17,7 +17,10 @@ internal sealed class AttachToProcessTool : ToolBase, IMcpTool
 
     public string Description =>
         "Attach the debugger to a running process by PID. Returns a sessionId for all subsequent debug commands. " +
-        "The process will be paused at attach — use continue_execution or step commands to resume.";
+        "The process will be paused at attach — use continue_execution or step commands to resume. " +
+        "Note: breakpoints set immediately after attach may show 'verified: false' if the target assembly is not yet loaded. " +
+        "If this happens, call continue_execution once to let the runtime load assemblies, then re-set breakpoints. " +
+        "Prefer launch_process over attach when possible for more reliable breakpoint resolution.";
 
     public JsonNode GetInputSchema() => JsonNode.Parse("""
         {

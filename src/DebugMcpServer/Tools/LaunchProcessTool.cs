@@ -17,7 +17,10 @@ internal sealed class LaunchProcessTool : ToolBase, IMcpTool
 
     public string Description =>
         "Launch a process under the debugger. Returns a sessionId for all subsequent debug commands. " +
-        "The process will be paused at entry (by default) — use continue_execution or step commands to proceed.";
+        "The process will be paused at entry (by default) — use continue_execution or step commands to proceed. " +
+        "For .NET: pass the .dll path directly as 'program' (e.g., bin/Debug/net8.0/MyApp.dll). " +
+        "Do NOT use 'dotnet' as program with the DLL as args. " +
+        "Breakpoints set after launch (while paused at entry) will be verified immediately.";
 
     public JsonNode GetInputSchema() => JsonNode.Parse("""
         {

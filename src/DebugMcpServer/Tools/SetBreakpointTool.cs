@@ -10,7 +10,8 @@ internal sealed class SetBreakpointTool : ToolBase, IMcpTool
     private readonly ILogger<SetBreakpointTool> _logger;
 
     public string Name => "set_breakpoint";
-    public string Description => "Set a breakpoint at a specific source file and line number. Returns the verified breakpoint location.";
+    public string Description => "Set a breakpoint at a specific source file and line number. Returns the verified breakpoint location. " +
+        "If 'verified' is false, the debug adapter hasn't loaded that module yet — call continue_execution to let the runtime load it, then re-set the breakpoint.";
 
     public JsonNode GetInputSchema() => JsonNode.Parse("""
         {
