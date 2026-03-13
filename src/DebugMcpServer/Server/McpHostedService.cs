@@ -211,6 +211,28 @@ internal sealed class McpHostedService : IHostedService
         - **Debug specific tests via attach**: Set env var `VSTEST_HOST_DEBUG=1`, run `dotnet test --filter "TestName"`. The test runner prints `Process Id: <PID>`. Use `attach_to_process` with that PID. **Important**: set breakpoints AFTER attaching and BEFORE calling `continue_execution` — breakpoints set during attach resolve only after assemblies are loaded. If breakpoints show as `verified: false`, call `continue_execution` once to let the runtime load assemblies, then re-set the breakpoints.
         - **Breakpoints not verified?**: This means the debug adapter hasn't loaded the assembly containing that source file yet. Common causes: (1) setting breakpoints before `continue_execution` when using `attach_to_process`, (2) the PDB source paths don't match the local file paths. Verify PDB paths match your local source tree.
 
+        ### Debugging Unit Tests (Recommended Workflow)
+
+        Unit tests run in a child process spawned by the test runner (`dotnet test`, `pytest`, etc.),
+        so you typically cannot use `launch_process` — use `attach_to_process` instead.
+
+        1. **Add a debugger wait hook** to the test you want to debug so it pauses until you attach:
+           - C#: `while (!System.Diagnostics.Debugger.IsAttached) Thread.Sleep(500);`
+           - Python: `import debugpy; debugpy.wait_for_attach()`
+           Build/save after adding the hook.
+        2. **Run the test** in a background terminal: e.g., `dotnet test --no-build --filter "TestName"`
+        3. **Find the test process** using `list_processes`:
+           - Use `moduleFilter` to search by loaded DLL/module name (most precise):
+             `list_processes(moduleFilter: "MyTests")` — finds the process that loaded MyTests.dll
+           - Or use `filter` to search by process name: `list_processes(filter: "testhost")`
+        4. **Attach** with `attach_to_process` using the discovered PID.
+        5. **Set breakpoints** — breakpoints in the test assembly verify immediately.
+           Breakpoints in referenced assemblies show `verified: false` initially but resolve
+           automatically when the runtime loads that assembly.
+        6. **Continue execution** with `continue_execution` — the debugger-wait hook exits,
+           the test proceeds, and breakpoints are hit.
+        7. **Clean up** — remove the debugger wait hook from the test code when done.
+
         ### Important Notes
 
         - **Launch vs Attach**: Prefer `launch_process` over `attach_to_process` when possible — breakpoints are more reliable because the debugger controls module loading from the start. Use `attach_to_process` only when you need to debug a process you can't launch directly (e.g., a service, or a test host spawned by `dotnet test`).

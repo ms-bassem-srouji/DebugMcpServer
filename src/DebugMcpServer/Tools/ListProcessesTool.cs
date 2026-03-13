@@ -12,8 +12,11 @@ internal sealed class ListProcessesTool : ToolBase, IMcpTool
 
     public string Name => "list_processes";
     public string Description =>
-        "List running processes with their PIDs and names. Supports remote process listing via SSH. " +
-        "Use the returned pid with attach_to_process to start a debug session.";
+        "List running processes with their PIDs and names. Supports filtering by name or by loaded module/DLL. " +
+        "Supports remote process listing via SSH. " +
+        "Use the returned pid with attach_to_process to start a debug session. " +
+        "Tip: to find a .NET test process, use moduleFilter with the test DLL name (e.g., 'MyTests') " +
+        "instead of filtering by process name.";
 
     public JsonNode GetInputSchema() => JsonNode.Parse("""
         {
@@ -22,6 +25,10 @@ internal sealed class ListProcessesTool : ToolBase, IMcpTool
                 "filter": {
                     "type": "string",
                     "description": "Optional name filter (case-insensitive substring match on process name). Omit to list all processes."
+                },
+                "moduleFilter": {
+                    "type": "string",
+                    "description": "Optional filter to find processes that have loaded a specific DLL/module. Case-insensitive substring match against the full path of each loaded module. Use this to find a process by what code it's running (e.g., 'MyApp.dll' or 'MyTests'). More precise than name filtering when multiple instances of the same process exist."
                 },
                 "host": {
                     "type": "string",
@@ -53,6 +60,7 @@ internal sealed class ListProcessesTool : ToolBase, IMcpTool
     public async Task<JsonNode> ExecuteAsync(JsonNode? id, JsonNode? arguments, CancellationToken cancellationToken)
     {
         var filter = arguments?["filter"]?.GetValue<string>();
+        var moduleFilter = arguments?["moduleFilter"]?.GetValue<string>();
         var sshHost = arguments?["host"]?.GetValue<string>();
 
         if (!string.IsNullOrWhiteSpace(sshHost))
@@ -62,16 +70,23 @@ internal sealed class ListProcessesTool : ToolBase, IMcpTool
             return await ListRemoteProcessesAsync(id, sshHost, sshPort, sshKey, filter, cancellationToken);
         }
 
-        return ListLocalProcesses(id, filter);
+        return ListLocalProcesses(id, filter, moduleFilter);
     }
 
-    private JsonNode ListLocalProcesses(JsonNode? id, string? filter)
+    private JsonNode ListLocalProcesses(JsonNode? id, string? filter, string? moduleFilter)
     {
         var processes = new JsonArray();
         foreach (var p in _getProcesses().OrderBy(p => p.ProcessName, StringComparer.OrdinalIgnoreCase))
         {
             if (filter != null && !p.ProcessName.Contains(filter, StringComparison.OrdinalIgnoreCase))
                 continue;
+
+            // Module/DLL filter: check if the process has loaded a module matching the substring
+            if (moduleFilter != null)
+            {
+                if (!HasMatchingModule(p, moduleFilter))
+                    continue;
+            }
 
             var entry = new JsonObject
             {
@@ -86,6 +101,14 @@ internal sealed class ListProcessesTool : ToolBase, IMcpTool
             }
             catch { /* access denied — omit title */ }
 
+            // If moduleFilter was used, include the matched module path for context
+            if (moduleFilter != null)
+            {
+                var matchedModule = FindMatchingModuleName(p, moduleFilter);
+                if (matchedModule != null)
+                    entry["matchedModule"] = matchedModule;
+            }
+
             processes.Add(entry);
         }
 
@@ -96,6 +119,42 @@ internal sealed class ListProcessesTool : ToolBase, IMcpTool
         };
 
         return CreateTextResult(id, result.ToJsonString());
+    }
+
+    private static bool HasMatchingModule(Process process, string moduleFilter)
+    {
+        try
+        {
+            foreach (ProcessModule module in process.Modules)
+            {
+                if (module.FileName.Contains(moduleFilter, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+        catch
+        {
+            // Access denied or 32/64-bit mismatch — skip this process
+        }
+
+        return false;
+    }
+
+    private static string? FindMatchingModuleName(Process process, string moduleFilter)
+    {
+        try
+        {
+            foreach (ProcessModule module in process.Modules)
+            {
+                if (module.FileName.Contains(moduleFilter, StringComparison.OrdinalIgnoreCase))
+                    return module.FileName;
+            }
+        }
+        catch
+        {
+            // Access denied or 32/64-bit mismatch
+        }
+
+        return null;
     }
 
     private async Task<JsonNode> ListRemoteProcessesAsync(

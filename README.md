@@ -23,6 +23,51 @@ Attach to running processes, set breakpoints, step through code, inspect variabl
 - **Source view** — View source code around the current stop location with line numbers
 - **Human-readable errors** — Common DAP error codes are translated into actionable guidance
 
+## Platform Compatibility
+
+The MCP server runs on Windows, Linux, and macOS. Most features work across all platforms, but some capabilities are platform-specific:
+
+### Core Debugging
+
+| Feature | Windows | Linux | macOS | Notes |
+|---------|:-------:|:-----:|:-----:|-------|
+| Launch process | ✅ | ✅ | ✅ | Requires a DAP adapter for the target language |
+| Attach to process | ✅ | ✅ | ✅ | |
+| Breakpoints (line, conditional, function) | ✅ | ✅ | ✅ | |
+| Exception breakpoints | ✅ | ✅ | ✅ | |
+| Data breakpoints (watchpoints) | ✅ | ✅ | ✅ | Adapter-dependent |
+| Stepping (over, in, out) | ✅ | ✅ | ✅ | |
+| Variable inspection | ✅ | ✅ | ✅ | |
+| Expression evaluation | ✅ | ✅ | ✅ | |
+| Memory read/write | ✅ | ✅ | ✅ | Adapter-dependent |
+| Remote debugging (SSH) | ✅ | ✅ | ✅ | |
+
+### Process Discovery
+
+| Feature | Windows | Linux | macOS | Notes |
+|---------|:-------:|:-----:|:-----:|-------|
+| `list_processes` (name filter) | ✅ | ✅ | ✅ | |
+| `list_processes` (moduleFilter) | ✅ | ✅ | ❌ | Uses `Process.Modules` — not supported on macOS. Falls back silently (no crash, just no matches). |
+| `list_processes` (remote via SSH) | ✅ | ✅ | ✅ | |
+
+### Dump Analysis
+
+| Feature | Windows | Linux | macOS | Notes |
+|---------|:-------:|:-----:|:-----:|-------|
+| .NET dump analysis (ClrMD) | ✅ | ✅ | ✅ | Built-in, no external tools needed |
+| Native dump analysis (DbgEng) | ✅ | ❌ | ❌ | Uses Windows-only `dbgeng.dll` (WinDbg engine) |
+| DAP-based dump loading | ✅ | ✅ | ✅ | Requires appropriate DAP adapter |
+
+### Debug Adapters
+
+| Adapter | Windows | Linux | macOS | Notes |
+|---------|:-------:|:-----:|:-----:|-------|
+| netcoredbg (.NET) | ✅ | ✅ | ✅ | [Pre-built binaries](https://github.com/Samsung/netcoredbg/releases) available |
+| debugpy (Python) | ✅ | ✅ | ✅ | `pip install debugpy` |
+| OpenDebugAD7 (C/C++) | ✅ | ✅ | ❌ | VS Code cpptools extension |
+| vsdbg (C/C++) | ✅ | ❌ | ❌ | Windows-only |
+| lldb-dap (C/C++/Rust) | ❌ | ✅ | ✅ | `apt install lldb` or `brew install llvm` |
+
 ## Installation
 
 ### dotnet tool (recommended)
@@ -271,7 +316,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 | Tool | Description |
 |------|-------------|
 | `list_adapters` | List configured debug adapters |
-| `list_processes` | Find running processes by name (local or remote via SSH) |
+| `list_processes` | Find running processes by name or by loaded module/DLL (local or remote via SSH) |
 | `attach_to_process` | Attach debugger to a running process by PID |
 | `launch_process` | Start a process under the debugger |
 | `detach_session` | Disconnect debugger, process continues running |
